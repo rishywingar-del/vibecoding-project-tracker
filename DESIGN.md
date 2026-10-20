@@ -1,3 +1,4 @@
+
 # Vibecoding Project Tracker — Design
 
 **Status:** Hackathon starter design doc · fill in the **`<TODO>`** sections before you tag `design-done`.
@@ -12,17 +13,17 @@
 
 One sentence that captures the feeling the tracker should leave you with.
 
-`<TODO>`
+FlowState should feel clean, organised and calm, helping users manage tasks and AI prompt context without unnecessary distractions.
 
 Two or three references that capture the vibe (links to dribbble shots, screenshots of apps you admire, Pinterest boards — anything visual):
 
-- `<TODO>`
-- `<TODO>`
-- `<TODO>`
+- https://linear.app
+- https://www.notion.so
+- https://trello.com
 
 Anti-references — what we are explicitly **not** trying to look like:
 
-- `<TODO>`
+- Cluttered dashboards with excessive colours, animations or too much information competing for attention.
 
 ## 2. Color palette
 
@@ -32,36 +33,36 @@ These are the colors the build milestones will reference. Once chosen, paste the
 
 | Token | Hex | Where it shows up |
 |---|---|---|
-| `brand-primary` | `<TODO>` | Header, "+" button, focus rings |
-| `brand-accent` | `<TODO>` | Highlights, hover states, links |
-| `surface-page` | `<TODO>` | Page background |
-| `surface-card` | `<TODO>` | Card background |
-| `text-primary` | `<TODO>` | Body text |
-| `text-muted` | `<TODO>` | Captions, dates, counts |
+| `brand-primary` | `#1D4ED8` | Header, "+" button, focus rings |
+| `brand-accent` | `#2563EB` | Highlights, hover states, links |
+| `surface-page` | `#F8FAFC` | Page background |
+| `surface-card` | `#FFFFFF` | Card background |
+| `text-primary` | `#0F172A` | Body text |
+| `text-muted` | `#475569` | Captions, dates, counts |
 
 ### Task type (M6 `tag-style`)
 
 | Token | Hex | When used |
 |---|---|---|
-| `type-feature` | `<TODO>` | Cards tagged `feature` (accent stripe + icon) |
-| `type-bug` | `<TODO>` | Cards tagged `bug` (accent stripe + icon) |
+| `type-feature` | `#047857` | Cards tagged `feature` (accent stripe + icon) |
+| `type-bug` | `#B91C1C` | Cards tagged `bug` (accent stripe + icon) |
 
 ### Due-date states (M8 `due-tint`)
 
 | Token | Hex | When used |
 |---|---|---|
-| `due-safe` | `<TODO>` | More than 2 days out |
-| `due-warning` | `<TODO>` | Less than 24 hours |
-| `due-overdue` | `<TODO>` | Past due |
-| `due-neutral` | `<TODO>` | Done (overrides date) |
+| `due-safe` | `#047857` | More than 2 days out |
+| `due-warning` | `#B45309` | Less than 24 hours |
+| `due-overdue` | `#B91C1C` | Past due |
+| `due-neutral` | `#64748B` | Done (overrides date) |
 
 ## 3. Typography
 
 | Role | Font | Why |
 |---|---|---|
-| Heading | `<TODO>` | `<TODO one sentence>` |
-| Body | `<TODO>` | `<TODO one sentence>` |
-| Monospace (tags, badges, code) | `<TODO>` | `<TODO one sentence>` |
+| Heading | `Inter` | Clear and modern, making headings easy to scan. |
+| Body | `Inter` | Readable for task descriptions and forms. |
+| Monospace (tags, badges, code) | `JetBrains Mono` | Distinguishes technical content from regular text. |
 
 Suggested sizes (override only if the design demands it):
 
@@ -75,11 +76,11 @@ Suggested sizes (override only if the design demands it):
 
 One short sentence per element. These set the tone for the build phase — Person A's modal and Person B's anchor board should both feel like they came from this doc.
 
-- **Cards:** `<TODO>` (e.g. "Light, almost weightless; the only weight is from a 1px border, no shadow except on hover.")
-- **Buttons:** `<TODO>` (e.g. "Solid fill, no gradient, generous padding, rounded-md.")
-- **Modal:** `<TODO>` (e.g. "Centered, max-width-md, slate-900 backdrop at 50% opacity.")
-- **Empty states:** `<TODO>` (e.g. "Dashed border, muted text, never sad.")
-- **Drag affordance (if used):** `<TODO>` (e.g. "None — we use a status dropdown.")
+- **Cards:** White backgrounds, subtle 1px borders, rounded corners and minimal shadows. (e.g. "Light, almost weightless; the only weight is from a 1px border, no shadow except on hover.")
+- **Buttons:** Solid brand-primary fill, clear labels, rounded corners and visible focus indicators. (e.g. "Solid fill, no gradient, generous padding, rounded-md.")
+- **Modal:** Centred, readable width, dark semi-transparent backdrop and clearly labelled fields. (e.g. "Centered, max-width-md, slate-900 backdrop at 50% opacity.")
+- **Empty states:** Dashed borders and muted, helpful text when no tasks are present. (e.g. "Dashed border, muted text, never sad.")
+- **Drag affordance (if used):** None — tasks move between columns using a status dropdown. (e.g. "None — we use a status dropdown.")
 
 ## 5. Voice / microcopy
 
@@ -87,18 +88,18 @@ Three lines of microcopy that capture the tone of the product. Keep it short —
 
 | Where | Text |
 |---|---|
-| "+" button label | `<TODO>` (e.g. "+ Task" or "Add task" or "New") |
-| Empty column placeholder | `<TODO>` (e.g. "Nothing here yet — keep going.") |
-| Toast after "Copy as Prompt Context" | `<TODO>` (e.g. "Copied. Now paste it into the AI.") |
-| Confirm-delete message | `<TODO>` (e.g. "Delete this task? You can't undo.") |
-| Handoff toast (M7 `task-owner`) | `<TODO>` (e.g. "Handed off to {name}. They've got it.") |
+| "+" button label | `+ Add Task` (e.g. "+ Task" or "Add task" or "New") |
+| Empty column placeholder | `No tasks here yet.` (e.g. "Nothing here yet — keep going.") |
+| Toast after "Copy as Prompt Context" | `Context copied. Ready to paste into your AI tool.` (e.g. "Copied. Now paste it into the AI.") |
+| Confirm-delete message | `Delete this task? This action cannot be undone.` (e.g. "Delete this task? You can't undo.") |
+| Handoff toast (M7 `task-owner`) | `Task assigned to {name}.` (e.g. "Handed off to {name}. They've got it.") |
 
 ## 6. Logo / wordmark
 
 The tracker probably doesn't need a logo, but it does need a name and a wordmark style.
 
-- **Product name:** `<TODO>` (match PRD §11 team identity)
-- **Wordmark style:** `<TODO>` (e.g. "Just the name in the heading font, brand-primary color, no icon.")
+- **Product name:** `FlowState` (match PRD §11 team identity)
+- **Wordmark style:** `FlowState in Inter semibold, brand-primary colour, without an icon.` (e.g. "Just the name in the heading font, brand-primary color, no icon.")
 
 ## 7. Out of scope (this hackathon)
 
