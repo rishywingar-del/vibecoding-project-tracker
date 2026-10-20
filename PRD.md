@@ -95,11 +95,10 @@ Fill these in before tagging `prd-done`:
 
 | Slot | Name | GitHub handle |
 |---|---|---|
-| Teammate A | `<TODO>` | `<TODO>` |
-| Teammate B | `<TODO>` | `<TODO>` |
-| Teammate C | `<TODO>` | `<TODO>` |
+| Teammate A | Rishy Winayagarajah | rishywingar-del |
+| Teammate B | N/A (working individually) | N/A |
+| Teammate C | N/A (working individually) | N/A |
 
-These three names become the **only** allowed values for `Task.assignee`. No auth — just a dropdown.
 
 ## 9. Milestone ownership
 
@@ -107,18 +106,17 @@ Fill in the owner column. Recommended default in **bold**; change if your team h
 
 | # | Tag | Title | Suggested owner | Final owner |
 |---|---|---|---|---|
-| 3 | `design-done` | Design system + voice (DESIGN.md) | **B** | `<TODO>` |
-| 4 | `data-model` | Task model + board view | **A** | `<TODO>` |
-| 5 | `crud-modal` | Add / edit / delete modal | **A** | `<TODO>` |
-| 6 | `tag-style` | Feature / bug colors | **B** | `<TODO>` |
-| 7 | `task-owner` | Owner indicator + handoff | **A** | `<TODO>` |
-| 8 | `due-tint` | Due-date color tinting | **B** | `<TODO>` |
-| 9 | `context` | Context field on the task modal | **C** | `<TODO>` |
-| 10 | `copy-prompt` | "Copy as Prompt Context" button | **C** | `<TODO>` |
-| 11 | `anchors` | Deliverable Anchor Board | **B** | `<TODO>` |
-| 12 | `secret-sauce` | The one thing that makes it yours | **C / All** | `<TODO>` |
-| 13 | `pitch-ready` | Demo + pitch rehearsal | **All** | `<TODO>` |
-
+| 3 | `design-done` | Design system + voice (DESIGN.md) | **B** | Rishy Winayagarajah |
+| 4 | `data-model` | Task model + board view | **A** | Rishy Winayagarajah |
+| 5 | `crud-modal` | Add / edit / delete modal | **A** | Rishy Winayagarajah |
+| 6 | `tag-style` | Feature / bug colors | **B** | Rishy Winayagarajah |
+| 7 | `task-owner` | Owner indicator + handoff | **A** | Rishy Winayagarajah |
+| 8 | `due-tint` | Due-date color tinting | **B** | Rishy Winayagarajah |
+| 9 | `context` | Context field on the task modal | **C** | Rishy Winayagarajah |
+| 10 | `copy-prompt` | "Copy as Prompt Context" button | **C** | Rishy Winayagarajah |
+| 11 | `anchors` | Deliverable Anchor Board | **B** | Rishy Winayagarajah |
+| 12 | `secret-sauce` | The one thing that makes it yours | **C / All** | Rishy Winayagarajah |
+| 13 | `pitch-ready` | Demo + pitch rehearsal | **All** | Rishy Winayagarajah |
 
 Track A owns the state model and task ownership. Track B owns the visuals (and design — M3 runs parallel to M2 so the team starts Phase 3 with the palette already chosen). Track C owns the differentiator features (M9 + M10 — the context field and the Copy-as-Prompt button) and usually leads on M12 secret-sauce. Put your strongest prompter on Track C.
 
@@ -141,11 +139,9 @@ Keep the Context field of each real task up to date as you work. By the end of t
 
 ## 11. Team identity
 
-Fill in:
-
-- **Team name:** `<TODO>`
-- **Tagline (one sentence):** `<TODO>`
-- **Tracker URL after deploy:** `<TODO>` (Vercel will give it to you)
+- **Team name:** FlowState
+- **Tagline:** Track tasks, manage AI prompt context, and keep project deliverables organised in one place.
+- **Tracker URL after deploy:** <TODO>
 
 ## 12. Out of scope (do not build)
 
