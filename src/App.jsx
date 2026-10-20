@@ -244,10 +244,23 @@ export default function App() {
                     onClick={() => openEditTask(task)}
                     className="w-full rounded-lg border border-slate-200 bg-surface-card p-4 text-left shadow-sm transition hover:border-blue-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-700"
                   >
-                    <h3 className="text-sm font-semibold text-text-primary">
-                      {task.title}
-                    </h3>
-                    <p className="mt-2 text-sm leading-5 text-text-muted">
+                    <div className="mb-2 flex items-start justify-between gap-2">
+                      <h3 className="text-sm font-semibold text-text-primary">
+                        {task.title}
+                      </h3>
+
+                      <span
+                        className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${
+                          task.type === 'bug'
+                            ? 'bg-red-50 text-red-700'
+                            : 'bg-emerald-50 text-emerald-700'
+                        }`}
+                      >
+                        {task.type === 'bug' ? 'Bug' : 'Feature'}
+                      </span>
+                    </div>
+
+                    <p className="text-sm leading-5 text-text-muted">
                       {task.description}
                     </p>
                   </button>
