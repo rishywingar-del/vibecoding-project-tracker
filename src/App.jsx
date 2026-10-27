@@ -11,7 +11,7 @@ export const STAGES = [
 export function useLocalStorage(key, initialValue) {
   const [value, setValue] = useState(() => {
     try {
-      const stored = window.localStorage.getItem(key);
+      const stored = localStorage.getItem(key);
       return stored === null ? initialValue : JSON.parse(stored);
     } catch {
       return initialValue;
@@ -20,9 +20,9 @@ export function useLocalStorage(key, initialValue) {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(key, JSON.stringify(value));
+      localStorage.setItem(key, JSON.stringify(value));
     } catch {
-      // Storage may be unavailable.
+      // Ignore storage errors.
     }
   }, [key, value]);
 
@@ -86,9 +86,24 @@ const blankTask = () => ({
   context: '',
 });
 
+const blankAnchor = () => ({
+  title: '',
+  description: '',
+  url: '',
+});
+
+const inputStyle =
+  'w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-100';
+
+const primaryButton =
+  'rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800';
+
+const secondaryButton =
+  'rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50';
+
 function initials(name) {
   return (
-    name
+    (name || '')
       .trim()
       .split(/\s+/)
       .slice(0, 2)
@@ -107,9 +122,7 @@ function getDeadlineState(task) {
 
   const due = new Date(`${task.dueDate}T00:00:00`);
 
-  if (Number.isNaN(due.getTime())) {
-    return 'normal';
-  }
+  if (Number.isNaN(due.getTime())) return 'normal';
 
   const daysLeft = Math.round(
     (due.getTime() - today.getTime()) / 86400000
@@ -117,7 +130,6 @@ function getDeadlineState(task) {
 
   if (daysLeft < 0) return 'overdue';
   if (daysLeft <= 3) return 'soon';
-
   return 'normal';
 }
 
@@ -146,7 +158,9 @@ function buildPromptContext(task) {
     `TYPE: ${task.type === 'bug' ? 'Bug' : 'Feature'}`,
     `STATUS: ${stage}`,
     `ASSIGNED TO: ${task.assignee || 'Unassigned'}`,
-    `DUE DATE: ${task.dueDate ? formatDueDate(task.dueDate) : 'Not set'}`,
+    `DUE DATE: ${
+      task.dueDate ? formatDueDate(task.dueDate) : 'Not set'
+    }`,
     '',
     'TASK DESCRIPTION:',
     task.description || 'No description provided.',
@@ -157,6 +171,21 @@ function buildPromptContext(task) {
     'Please use the information above to help me complete this task.',
     'If you suggest code, explain where it should go and keep it consistent with the existing project.',
   ].join('\n');
+}
+
+function safeLink(url) {
+  try {
+    const parsed = new URL(url);
+    if (
+      parsed.protocol === 'https:' ||
+      parsed.protocol === 'http:'
+    ) {
+      return parsed.href;
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }
 
 export default function App() {
@@ -170,12 +199,23 @@ export default function App() {
     ['Rishy Winayagarajah']
   );
 
+  // M11: Project anchors are stored separately from tasks.
+  const [anchors, setAnchors] = useLocalStorage(
+    'vibetracker.anchors',
+    []
+  );
+
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState(blankTask());
+
   const [showTeam, setShowTeam] = useState(false);
   const [newMember, setNewMember] = useState('');
   const [teamError, setTeamError] = useState('');
+
   const [copyMessage, setCopyMessage] = useState('');
+
+  const [editingAnchor, setEditingAnchor] = useState(null);
+  const [anchorForm, setAnchorForm] = useState(blankAnchor());
 
   function openNewTask() {
     setCopyMessage('');
@@ -202,7 +242,6 @@ export default function App() {
 
   function saveTask(event) {
     event.preventDefault();
-
     if (!form.title.trim()) return;
 
     const saved = {
@@ -236,13 +275,7 @@ export default function App() {
   }
 
   function deleteTask() {
-    if (
-      !window.confirm(
-        'Delete this task? This action cannot be undone.'
-      )
-    ) {
-      return;
-    }
+    if (!window.confirm('Delete this task?')) return;
 
     setTasks((current) =>
       current.filter((task) => task.id !== editing.id)
@@ -291,16 +324,85 @@ export default function App() {
       return;
     }
 
-    const prompt = buildPromptContext(form);
-
     try {
-      await navigator.clipboard.writeText(prompt);
-      setCopyMessage('Copied! Paste it into your AI assistant.');
+      await navigator.clipboard.writeText(
+        buildPromptContext(form)
+      );
+      setCopyMessage(
+        'Copied! Paste it into your AI assistant.'
+      );
     } catch {
       setCopyMessage(
-        'Could not copy automatically. Check your browser clipboard permissions.'
+        'Could not copy. Check your clipboard permissions.'
       );
     }
+  }
+
+  // M11: Add, edit and delete project anchors.
+  function openNewAnchor() {
+    setAnchorForm(blankAnchor());
+    setEditingAnchor({ id: null });
+  }
+
+  function openEditAnchor(anchor) {
+    setAnchorForm({
+      title: anchor.title,
+      description: anchor.description || '',
+      url: anchor.url || '',
+    });
+    setEditingAnchor(anchor);
+  }
+
+  function saveAnchor(event) {
+    event.preventDefault();
+
+    const title = anchorForm.title.trim();
+    const description = anchorForm.description.trim();
+    const url = anchorForm.url.trim();
+
+    if (!title) return;
+
+    if (url && !safeLink(url)) {
+      window.alert(
+        'Please enter a valid link starting with https:// or http://'
+      );
+      return;
+    }
+
+    const saved = { title, description, url };
+
+    if (editingAnchor.id === null) {
+      setAnchors((current) => [
+        ...current,
+        {
+          ...saved,
+          id: crypto.randomUUID(),
+        },
+      ]);
+    } else {
+      setAnchors((current) =>
+        current.map((anchor) =>
+          anchor.id === editingAnchor.id
+            ? { ...anchor, ...saved }
+            : anchor
+        )
+      );
+    }
+
+    setEditingAnchor(null);
+  }
+
+  function deleteAnchor() {
+    if (!window.confirm('Remove this project anchor?')) {
+      return;
+    }
+
+    setAnchors((current) =>
+      current.filter(
+        (anchor) => anchor.id !== editingAnchor.id
+      )
+    );
+    setEditingAnchor(null);
   }
 
   return (
@@ -319,7 +421,7 @@ export default function App() {
           <button
             type="button"
             onClick={() => setShowTeam(true)}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-text-primary hover:bg-slate-50"
+            className={secondaryButton}
           >
             Manage Team ({team.length})
           </button>
@@ -327,12 +429,103 @@ export default function App() {
           <button
             type="button"
             onClick={openNewTask}
-            className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+            className={primaryButton}
           >
             + Add Task
           </button>
         </div>
       </header>
+
+      {/* M11: Anchor Board, displayed above Kanban */}
+      <section className="mb-8 rounded-xl border border-indigo-200 bg-white p-5 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <span aria-hidden="true">📌</span>
+              <h2 className="text-lg font-bold text-slate-900">
+                Project Anchor Board
+              </h2>
+              <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                {anchors.length}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-slate-500">
+              Keep your important project links and
+              deliverables in one place.
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={openNewAnchor}
+            className={primaryButton}
+          >
+            + Add Anchor
+          </button>
+        </div>
+
+        {anchors.length === 0 ? (
+          <div className="rounded-xl border-2 border-dashed border-indigo-200 bg-indigo-50/50 px-5 py-8 text-center">
+            <p className="text-sm font-semibold text-indigo-900">
+              Nothing pinned yet
+            </p>
+            <p className="mt-1 text-sm text-indigo-700">
+              Add your PRD, GitHub repo, design document or
+              deployed app link.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {anchors.map((anchor) => {
+              const link = safeLink(anchor.url);
+
+              return (
+                <article
+                  key={anchor.id}
+                  className="rounded-xl border border-slate-200 bg-slate-50 p-4"
+                >
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <h3 className="break-words text-sm font-bold text-slate-900">
+                      📌 {anchor.title}
+                    </h3>
+
+                    <button
+                      type="button"
+                      onClick={() => openEditAnchor(anchor)}
+                      className="shrink-0 text-xs font-semibold text-blue-700 hover:underline"
+                    >
+                      Edit
+                    </button>
+                  </div>
+
+                  {anchor.description && (
+                    <p className="mb-3 whitespace-pre-wrap break-words text-sm leading-5 text-slate-600">
+                      {anchor.description}
+                    </p>
+                  )}
+
+                  {link && (
+                    <a
+                      href={link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex max-w-full items-center gap-1 break-all text-sm font-semibold text-blue-700 hover:underline"
+                    >
+                      Open link ↗
+                    </a>
+                  )}
+
+                  {!link && !anchor.description && (
+                    <p className="text-xs text-slate-400">
+                      Pinned project deliverable
+                    </p>
+                  )}
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <div className="mb-5 flex flex-wrap gap-3 text-xs font-medium text-slate-600">
         <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5">
@@ -463,6 +656,7 @@ export default function App() {
         })}
       </main>
 
+      {/* Add and edit task modal */}
       {editing !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div
@@ -474,7 +668,7 @@ export default function App() {
             <div className="mb-5 flex items-center justify-between">
               <h2
                 id="task-modal-title"
-                className="text-xl font-semibold text-text-primary"
+                className="text-xl font-semibold text-slate-900"
               >
                 {editing.id === null ? 'Add Task' : 'Edit Task'}
               </h2>
@@ -483,7 +677,7 @@ export default function App() {
                 type="button"
                 onClick={() => setEditing(null)}
                 aria-label="Close task form"
-                className="rounded px-2 py-1 text-xl text-text-muted hover:bg-slate-100"
+                className="rounded px-2 py-1 text-xl text-slate-500 hover:bg-slate-100"
               >
                 ×
               </button>
@@ -493,7 +687,7 @@ export default function App() {
               <div>
                 <label
                   htmlFor="task-title"
-                  className="mb-1 block text-sm font-medium text-text-primary"
+                  className="mb-1 block text-sm font-medium"
                 >
                   Title
                 </label>
@@ -509,20 +703,20 @@ export default function App() {
                     });
                     setCopyMessage('');
                   }}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className={inputStyle}
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="task-description"
-                  className="mb-1 block text-sm font-medium text-text-primary"
+                  className="mb-1 block text-sm font-medium"
                 >
                   Description
                 </label>
                 <textarea
                   id="task-description"
-                  rows="3"
+                  rows={3}
                   value={form.description}
                   onChange={(event) => {
                     setForm({
@@ -531,20 +725,20 @@ export default function App() {
                     });
                     setCopyMessage('');
                   }}
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className={inputStyle}
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="task-context"
-                  className="mb-1 block text-sm font-medium text-text-primary"
+                  className="mb-1 block text-sm font-medium"
                 >
                   Task Context / AI Briefing
                 </label>
                 <textarea
                   id="task-context"
-                  rows="5"
+                  rows={5}
                   value={form.context}
                   onChange={(event) => {
                     setForm({
@@ -560,16 +754,15 @@ export default function App() {
                     '- Technical constraints\n' +
                     '- Useful links or previous decisions'
                   }
-                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                  className={inputStyle}
                 />
-                <p className="mt-1 text-xs text-text-muted">
-                  Save details here and copy them into an AI coding
-                  assistant whenever you need them.
+                <p className="mt-1 text-xs text-slate-500">
+                  These notes are saved with the task.
                 </p>
               </div>
 
               <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <p className="text-sm font-semibold text-indigo-950">
                       Ready for AI
@@ -591,7 +784,7 @@ export default function App() {
                 {copyMessage && (
                   <p
                     role="status"
-                    className="text-xs font-medium text-indigo-900"
+                    className="mt-2 text-xs font-medium text-indigo-900"
                   >
                     {copyMessage}
                   </p>
@@ -602,7 +795,7 @@ export default function App() {
                 <div>
                   <label
                     htmlFor="task-type"
-                    className="mb-1 block text-sm font-medium text-text-primary"
+                    className="mb-1 block text-sm font-medium"
                   >
                     Type
                   </label>
@@ -615,7 +808,7 @@ export default function App() {
                         type: event.target.value,
                       })
                     }
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    className={inputStyle}
                   >
                     <option value="feature">Feature</option>
                     <option value="bug">Bug</option>
@@ -625,7 +818,7 @@ export default function App() {
                 <div>
                   <label
                     htmlFor="task-status"
-                    className="mb-1 block text-sm font-medium text-text-primary"
+                    className="mb-1 block text-sm font-medium"
                   >
                     Status
                   </label>
@@ -638,7 +831,7 @@ export default function App() {
                         status: event.target.value,
                       })
                     }
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    className={inputStyle}
                   >
                     {STAGES.map((stage) => (
                       <option key={stage.id} value={stage.id}>
@@ -651,7 +844,7 @@ export default function App() {
                 <div>
                   <label
                     htmlFor="task-assignee"
-                    className="mb-1 block text-sm font-medium text-text-primary"
+                    className="mb-1 block text-sm font-medium"
                   >
                     Hand off to...
                   </label>
@@ -664,7 +857,7 @@ export default function App() {
                         assignee: event.target.value,
                       })
                     }
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm"
+                    className={inputStyle}
                   >
                     <option value="">Unassigned</option>
                     {!team.includes(form.assignee) &&
@@ -684,7 +877,7 @@ export default function App() {
                 <div>
                   <label
                     htmlFor="task-due-date"
-                    className="mb-1 block text-sm font-medium text-text-primary"
+                    className="mb-1 block text-sm font-medium"
                   >
                     Due date
                   </label>
@@ -698,7 +891,7 @@ export default function App() {
                         dueDate: event.target.value,
                       })
                     }
-                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                    className={inputStyle}
                   />
                 </div>
               </div>
@@ -720,13 +913,14 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setEditing(null)}
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-text-primary hover:bg-slate-50"
+                    className={secondaryButton}
                   >
                     Cancel
                   </button>
+
                   <button
                     type="submit"
-                    className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+                    className={primaryButton}
                   >
                     {editing.id === null
                       ? 'Add Task'
@@ -739,6 +933,7 @@ export default function App() {
         </div>
       )}
 
+      {/* Team management modal */}
       {showTeam && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div
@@ -750,10 +945,11 @@ export default function App() {
             <div className="mb-4 flex items-center justify-between">
               <h2
                 id="team-modal-title"
-                className="text-xl font-semibold text-text-primary"
+                className="text-xl font-semibold text-slate-900"
               >
                 Manage Team
               </h2>
+
               <button
                 type="button"
                 aria-label="Close team management"
@@ -761,15 +957,15 @@ export default function App() {
                   setShowTeam(false);
                   setTeamError('');
                 }}
-                className="rounded px-2 py-1 text-xl text-text-muted hover:bg-slate-100"
+                className="rounded px-2 py-1 text-xl text-slate-500 hover:bg-slate-100"
               >
                 ×
               </button>
             </div>
 
-            <p className="mb-4 text-sm text-text-muted">
-              Add teammates so tasks can be handed off to the
-              right person.
+            <p className="mb-4 text-sm text-slate-500">
+              Add teammates so tasks can be handed off to
+              the right person.
             </p>
 
             <form
@@ -782,6 +978,7 @@ export default function App() {
               >
                 Team member name
               </label>
+
               <input
                 id="new-member"
                 value={newMember}
@@ -791,11 +988,12 @@ export default function App() {
                 }}
                 placeholder="Team member name"
                 required
-                className="min-w-0 flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                className={`${inputStyle} min-w-0 flex-1`}
               />
+
               <button
                 type="submit"
-                className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-800"
+                className={primaryButton}
               >
                 Add
               </button>
@@ -816,7 +1014,7 @@ export default function App() {
                   key={name}
                   className="flex items-center justify-between gap-3 rounded-lg border border-slate-200 p-3"
                 >
-                  <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-text-primary">
+                  <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-slate-900">
                     <span
                       aria-hidden="true"
                       className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-800"
@@ -838,7 +1036,7 @@ export default function App() {
               ))}
 
               {team.length === 0 && (
-                <li className="text-sm text-text-muted">
+                <li className="text-sm text-slate-500">
                   No team members yet.
                 </li>
               )}
@@ -850,10 +1048,153 @@ export default function App() {
                 setShowTeam(false);
                 setTeamError('');
               }}
-              className="mt-5 w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-text-primary hover:bg-slate-50"
+              className={`${secondaryButton} mt-5 w-full`}
             >
               Done
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* M11: Add and edit project anchor modal */}
+      {editingAnchor !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="anchor-modal-title"
+            className="max-h-[90vh] w-full max-w-md overflow-y-auto rounded-xl bg-white p-6 shadow-xl"
+          >
+            <div className="mb-5 flex items-center justify-between">
+              <h2
+                id="anchor-modal-title"
+                className="text-xl font-semibold text-slate-900"
+              >
+                {editingAnchor.id === null
+                  ? 'Add Project Anchor'
+                  : 'Edit Project Anchor'}
+              </h2>
+
+              <button
+                type="button"
+                aria-label="Close anchor form"
+                onClick={() => setEditingAnchor(null)}
+                className="rounded px-2 py-1 text-xl text-slate-500 hover:bg-slate-100"
+              >
+                ×
+              </button>
+            </div>
+
+            <form
+              onSubmit={saveAnchor}
+              className="space-y-4"
+            >
+              <div>
+                <label
+                  htmlFor="anchor-title"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  Deliverable name
+                </label>
+
+                <input
+                  id="anchor-title"
+                  required
+                  value={anchorForm.title}
+                  onChange={(event) =>
+                    setAnchorForm({
+                      ...anchorForm,
+                      title: event.target.value,
+                    })
+                  }
+                  placeholder="e.g. Project Requirements Document"
+                  className={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="anchor-description"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  Description
+                </label>
+
+                <textarea
+                  id="anchor-description"
+                  rows={3}
+                  value={anchorForm.description}
+                  onChange={(event) =>
+                    setAnchorForm({
+                      ...anchorForm,
+                      description: event.target.value,
+                    })
+                  }
+                  placeholder="What is this document or link for?"
+                  className={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="anchor-url"
+                  className="mb-1 block text-sm font-medium"
+                >
+                  Link (optional)
+                </label>
+
+                <input
+                  id="anchor-url"
+                  type="url"
+                  value={anchorForm.url}
+                  onChange={(event) =>
+                    setAnchorForm({
+                      ...anchorForm,
+                      url: event.target.value,
+                    })
+                  }
+                  placeholder="https://..."
+                  className={inputStyle}
+                />
+
+                <p className="mt-1 text-xs text-slate-500">
+                  Add a GitHub, document or deployed app link.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-slate-200 pt-4">
+                <div>
+                  {editingAnchor.id !== null && (
+                    <button
+                      type="button"
+                      onClick={deleteAnchor}
+                      className="text-sm font-medium text-red-700 hover:underline"
+                    >
+                      Remove Anchor
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingAnchor(null)}
+                    className={secondaryButton}
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    className={primaryButton}
+                  >
+                    {editingAnchor.id === null
+                      ? 'Pin Anchor'
+                      : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </form>
           </div>
         </div>
       )}
