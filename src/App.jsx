@@ -39,6 +39,7 @@ const STARTER_TASKS = [
     assignee: 'Rishy Winayagarajah',
     dueDate: null,
     createdDate: '2026-10-20',
+    context: '',
   },
   {
     id: '2',
@@ -49,6 +50,7 @@ const STARTER_TASKS = [
     assignee: 'Rishy Winayagarajah',
     dueDate: null,
     createdDate: '2026-10-20',
+    context: '',
   },
   {
     id: '3',
@@ -59,6 +61,7 @@ const STARTER_TASKS = [
     assignee: 'Rishy Winayagarajah',
     dueDate: null,
     createdDate: '2026-10-20',
+    context: '',
   },
   {
     id: '4',
@@ -69,6 +72,7 @@ const STARTER_TASKS = [
     assignee: 'Rishy Winayagarajah',
     dueDate: null,
     createdDate: '2026-10-20',
+    context: '',
   },
 ];
 
@@ -79,6 +83,7 @@ const blankTask = () => ({
   status: 'todo',
   assignee: '',
   dueDate: '',
+  context: '',
 });
 
 function initials(name) {
@@ -118,11 +123,15 @@ function getDeadlineState(task) {
 
 function formatDueDate(date) {
   if (!date) return '';
-  return new Date(`${date}T00:00:00`).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+
+  return new Date(`${date}T00:00:00`).toLocaleDateString(
+    'en-GB',
+    {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    }
+  );
 }
 
 export default function App() {
@@ -158,6 +167,7 @@ export default function App() {
       status: task.status,
       assignee: task.assignee || '',
       dueDate: task.dueDate || '',
+      context: task.context || '',
     });
     setEditing(task);
   }
@@ -171,6 +181,7 @@ export default function App() {
       ...form,
       title: form.title.trim(),
       description: form.description.trim(),
+      context: form.context.trim(),
       dueDate: form.dueDate || null,
     };
 
@@ -254,7 +265,7 @@ export default function App() {
             Vibecoding Project Tracker
           </h1>
           <p className="mt-1 text-sm text-text-muted">
-            FlowState · M8 Deadline Highlights
+            FlowState · Task Context
           </p>
         </div>
 
@@ -346,6 +357,17 @@ export default function App() {
                       <p className="text-sm leading-5 text-text-muted">
                         {task.description}
                       </p>
+
+                      {task.context && (
+                        <div className="mt-3 rounded-lg border border-indigo-100 bg-indigo-50/80 px-3 py-2">
+                          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-indigo-700">
+                            AI Briefing
+                          </p>
+                          <p className="line-clamp-2 whitespace-pre-wrap break-words text-xs leading-5 text-indigo-900">
+                            {task.context}
+                          </p>
+                        </div>
+                      )}
 
                       {task.dueDate && (
                         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -463,6 +485,38 @@ export default function App() {
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="task-context"
+                  className="mb-1 block text-sm font-medium text-text-primary"
+                >
+                  Task Context / AI Briefing
+                </label>
+                <textarea
+                  id="task-context"
+                  rows="5"
+                  value={form.context}
+                  onChange={(event) =>
+                    setForm({
+                      ...form,
+                      context: event.target.value,
+                    })
+                  }
+                  placeholder={
+                    'Add anything an AI coding assistant should know:\n' +
+                    '- Relevant files or components\n' +
+                    '- Requirements and acceptance criteria\n' +
+                    '- Technical constraints\n' +
+                    '- Useful links or previous decisions'
+                  }
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
+                />
+                <p className="mt-1 text-xs text-text-muted">
+                  This information is saved with the task so you
+                  can reuse it when working with AI tools.
+                </p>
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
