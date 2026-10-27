@@ -134,6 +134,31 @@ function formatDueDate(date) {
   );
 }
 
+function buildPromptContext(task) {
+  const stage =
+    STAGES.find((item) => item.id === task.status)?.label ||
+    task.status;
+
+  return [
+    'I am working on a software project and need help with the following task.',
+    '',
+    `TASK: ${task.title}`,
+    `TYPE: ${task.type === 'bug' ? 'Bug' : 'Feature'}`,
+    `STATUS: ${stage}`,
+    `ASSIGNED TO: ${task.assignee || 'Unassigned'}`,
+    `DUE DATE: ${task.dueDate ? formatDueDate(task.dueDate) : 'Not set'}`,
+    '',
+    'TASK DESCRIPTION:',
+    task.description || 'No description provided.',
+    '',
+    'PROJECT CONTEXT AND REQUIREMENTS:',
+    task.context || 'No additional context provided.',
+    '',
+    'Please use the information above to help me complete this task.',
+    'If you suggest code, explain where it should go and keep it consistent with the existing project.',
+  ].join('\n');
+}
+
 export default function App() {
   const [tasks, setTasks] = useLocalStorage(
     'vibetracker.tasks',
@@ -150,8 +175,10 @@ export default function App() {
   const [showTeam, setShowTeam] = useState(false);
   const [newMember, setNewMember] = useState('');
   const [teamError, setTeamError] = useState('');
+  const [copyMessage, setCopyMessage] = useState('');
 
   function openNewTask() {
+    setCopyMessage('');
     setForm({
       ...blankTask(),
       assignee: team[0] || '',
@@ -160,6 +187,7 @@ export default function App() {
   }
 
   function openEditTask(task) {
+    setCopyMessage('');
     setForm({
       title: task.title,
       description: task.description || '',
@@ -257,6 +285,24 @@ export default function App() {
     setTeamError('');
   }
 
+  async function copyPromptContext() {
+    if (!form.title.trim()) {
+      setCopyMessage('Add a task title before copying.');
+      return;
+    }
+
+    const prompt = buildPromptContext(form);
+
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopyMessage('Copied! Paste it into your AI assistant.');
+    } catch {
+      setCopyMessage(
+        'Could not copy automatically. Check your browser clipboard permissions.'
+      );
+    }
+  }
+
   return (
     <div className="min-h-screen bg-surface-page p-6">
       <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
@@ -265,7 +311,7 @@ export default function App() {
             Vibecoding Project Tracker
           </h1>
           <p className="mt-1 text-sm text-text-muted">
-            FlowState · Task Context
+            FlowState · AI-Ready Task Management
           </p>
         </div>
 
@@ -456,12 +502,13 @@ export default function App() {
                   type="text"
                   required
                   value={form.title}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setForm({
                       ...form,
                       title: event.target.value,
-                    })
-                  }
+                    });
+                    setCopyMessage('');
+                  }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
@@ -477,12 +524,13 @@ export default function App() {
                   id="task-description"
                   rows="3"
                   value={form.description}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setForm({
                       ...form,
                       description: event.target.value,
-                    })
-                  }
+                    });
+                    setCopyMessage('');
+                  }}
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
               </div>
@@ -498,12 +546,13 @@ export default function App() {
                   id="task-context"
                   rows="5"
                   value={form.context}
-                  onChange={(event) =>
+                  onChange={(event) => {
                     setForm({
                       ...form,
                       context: event.target.value,
-                    })
-                  }
+                    });
+                    setCopyMessage('');
+                  }}
                   placeholder={
                     'Add anything an AI coding assistant should know:\n' +
                     '- Relevant files or components\n' +
@@ -514,9 +563,39 @@ export default function App() {
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"
                 />
                 <p className="mt-1 text-xs text-text-muted">
-                  This information is saved with the task so you
-                  can reuse it when working with AI tools.
+                  Save details here and copy them into an AI coding
+                  assistant whenever you need them.
                 </p>
+              </div>
+
+              <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-indigo-950">
+                      Ready for AI
+                    </p>
+                    <p className="text-xs text-indigo-700">
+                      Turn this task into a reusable prompt.
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={copyPromptContext}
+                    className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-800"
+                  >
+                    Copy as Prompt Context
+                  </button>
+                </div>
+
+                {copyMessage && (
+                  <p
+                    role="status"
+                    className="text-xs font-medium text-indigo-900"
+                  >
+                    {copyMessage}
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -600,9 +679,6 @@ export default function App() {
                       </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-text-muted">
-                    Add more people using Manage Team.
-                  </p>
                 </div>
 
                 <div>
