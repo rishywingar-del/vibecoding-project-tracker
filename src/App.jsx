@@ -1,49 +1,11 @@
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export const STAGES = [
-  { id: 'todo', label: 'To Do', colour: 'bg-slate-400' },
-  { id: 'in-progress', label: 'In Progress', colour: 'bg-blue-400' },
-  { id: 'review', label: 'Review', colour: 'bg-amber-400' },
-  { id: 'done', label: 'Done', colour: 'bg-emerald-400' },
-];
-
-const NAV = [
-  { id: 'overview', label: 'Overview', icon: '◈' },
-  { id: 'board', label: 'Task Board', icon: '▦' },
-  { id: 'ai', label: 'AI Studio', icon: '✦' },
-  { id: 'deliverables', label: 'Deliverables', icon: '◫' },
-];
-
-const MODES = [
-  {
-    id: 'build',
-    label: 'Build a feature',
-    description: 'Turn a task into a clear implementation plan.',
-    instruction:
-      'Help me implement this feature. Break it into manageable steps, provide code where useful, explain which files to change and include acceptance checks.',
-  },
-  {
-    id: 'debug',
-    label: 'Debug an issue',
-    description: 'Investigate bugs without losing project context.',
-    instruction:
-      'Help me debug this issue. Identify likely causes, suggest a systematic investigation, propose a minimal fix and explain how to test it.',
-  },
-  {
-    id: 'review',
-    label: 'Review my work',
-    description: 'Check quality, usability and missing requirements.',
-    instruction:
-      'Review this task against its requirements. Identify potential bugs, accessibility issues, edge cases and improvements. Prioritise the findings.',
-  },
-  {
-    id: 'plan',
-    label: 'Plan next steps',
-    description: 'Get a practical checklist for what to do next.',
-    instruction:
-      'Create an actionable plan for completing this task. Include dependencies, a sensible order of work, risks and a definition of done.',
-  },
+  { id: 'todo', label: 'To Do', dot: 'bg-slate-400' },
+  { id: 'in-progress', label: 'In Progress', dot: 'bg-blue-500' },
+  { id: 'review', label: 'Review', dot: 'bg-amber-500' },
+  { id: 'done', label: 'Done', dot: 'bg-emerald-500' },
 ];
 
 const STARTER_TASKS = [
@@ -107,14 +69,14 @@ export function useLocalStorage(key, initialValue) {
     try {
       localStorage.setItem(key, JSON.stringify(value));
     } catch {
-      // Ignore storage errors.
+      // Storage may be unavailable.
     }
   }, [key, value]);
 
   return [value, setValue];
 }
 
-const blankTask = () => ({
+const emptyTask = () => ({
   title: '',
   description: '',
   type: 'feature',
@@ -127,17 +89,17 @@ const blankTask = () => ({
   aiOutcome: '',
 });
 
-const blankAnchor = () => ({
+const emptyAnchor = () => ({
   title: '',
   description: '',
   url: '',
 });
 
-const input =
-  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-3 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
+const field =
+  'w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100';
 
 const primary =
-  'rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50';
+  'rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-50';
 
 const secondary =
   'rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50';
@@ -150,12 +112,12 @@ function initials(name) {
       .trim()
       .split(/\s+/)
       .slice(0, 2)
-      .map((word) => word[0]?.toUpperCase())
+      .map((part) => part[0]?.toUpperCase())
       .join('') || '?'
   );
 }
 
-function dueState(task) {
+function deadline(task) {
   if (!task.dueDate || task.status === 'done') return 'normal';
 
   const today = new Date();
@@ -173,7 +135,7 @@ function dueState(task) {
   return 'normal';
 }
 
-function prettyDate(date) {
+function formatDate(date) {
   if (!date) return 'Not set';
 
   const parsed = new Date(`${date}T00:00:00`);
@@ -197,84 +159,86 @@ function safeLink(url) {
   }
 }
 
-function stageLabel(id) {
-  return STAGES.find((stage) => stage.id === id)?.label || id;
-}
-
 function taskContext(task) {
+  const stage =
+    STAGES.find((item) => item.id === task.status)?.label ||
+    task.status;
+
   return [
     `Task: ${task.title}`,
-    `Type: ${task.type === 'bug' ? 'Bug' : 'Feature'}`,
-    `Status: ${stageLabel(task.status)}`,
+    `Description: ${task.description || 'Not provided'}`,
+    `Type: ${task.type}`,
+    `Status: ${stage}`,
     `Owner: ${task.assignee || 'Unassigned'}`,
-    `Due date: ${prettyDate(task.dueDate)}`,
+    `Due date: ${formatDate(task.dueDate)}`,
     '',
-    'Description:',
-    task.description || 'No description provided.',
+    'Task context:',
+    task.context || 'No additional notes.',
     '',
-    'Development context:',
-    task.context || 'No additional context provided.',
-    '',
-    'AI workflow:',
+    'Previous AI workflow:',
     `Tool: ${task.aiTool || 'Not recorded'}`,
-    `Prompt used: ${task.aiPrompt || 'Not recorded'}`,
+    `Prompt: ${task.aiPrompt || 'Not recorded'}`,
     `Outcome: ${task.aiOutcome || 'Not recorded'}`,
   ].join('\n');
 }
 
-function makePrompt(task, mode, anchors, tasks) {
-  if (!task) return '';
+function generatePrompt(request, task, mode, anchors) {
+  const instructions = {
+    build:
+      'Help me implement this feature. Give me a clear step-by-step approach, relevant React code, where the changes should go, and a testing checklist.',
+    debug:
+      'Help me investigate this problem. Explain likely causes, how to test them, the smallest suitable fix, and how to confirm it works.',
+    explain:
+      'Explain this concept clearly and simply. Use practical examples relevant to my project and avoid unnecessary jargon.',
+    plan:
+      'Turn this request into manageable tasks. Include priorities, dependencies, possible problems and a definition of done.',
+  };
 
-  const selected = MODES.find((item) => item.id === mode) || MODES[0];
-
-  const projectAnchors = anchors.length
+  const references = anchors.length
     ? anchors
         .map(
           (anchor) =>
-            `- ${anchor.title}\n  ${anchor.description || ''}${
-              anchor.url ? `\n  ${anchor.url}` : ''
+            `- ${anchor.title}: ${anchor.description || 'Project reference'}${
+              anchor.url ? ` (${anchor.url})` : ''
             }`
         )
         .join('\n')
-    : 'No project deliverables have been pinned.';
-
-  const progress = tasks.filter(
-    (item) => item.status === 'done'
-  ).length;
+    : 'No project links have been pinned.';
 
   return [
-    'FLOWSTATE — PROJECT-AWARE AI BRIEFING',
+    'You are an experienced React developer helping me build FlowState.',
     '',
-    'PROJECT',
-    'Vibecoding Project Tracker, built with React, Vite and Tailwind CSS.',
-    'The app uses localStorage for task and project data.',
-    'The workflow is To Do → In Progress → Review → Done.',
+    'PROJECT BACKGROUND',
+    'FlowState is a Vibecoding Project Tracker built using React, Vite and Tailwind CSS.',
+    'It includes a four-stage Kanban board, team assignments, deadlines, AI development notes, and project deliverables.',
+    'Project data is saved locally using localStorage.',
     '',
-    'CURRENT PROJECT PROGRESS',
-    `${progress} of ${tasks.length} tasks completed.`,
+    'MY REQUEST',
+    request.trim(),
     '',
-    'WHAT I NEED HELP WITH',
-    selected.instruction,
+    'WHAT I NEED FROM YOU',
+    instructions[mode] || instructions.build,
     '',
-    'TASK DETAILS',
-    taskContext(task),
+    ...(task
+      ? ['RELATED TASK', taskContext(task), '']
+      : []),
+    'PROJECT REFERENCES',
+    references,
     '',
-    'PROJECT DELIVERABLES AND REFERENCES',
-    projectAnchors,
-    '',
-    'IMPORTANT INSTRUCTIONS',
-    '- Work with the existing React project rather than rebuilding it.',
-    '- Preserve working features and existing localStorage data.',
-    '- Do not claim to have read linked documents unless I provide their contents.',
-    '- Explain code changes clearly and keep them beginner-friendly.',
-    '- Finish with a short testing checklist.',
+    'IMPORTANT',
+    '- Keep existing features working.',
+    '- Preserve existing localStorage keys and saved data.',
+    '- Keep the design clean, responsive and easy to use.',
+    '- Explain exactly what code needs changing.',
+    '- Do not assume you have opened any linked documents.',
+    '- End with a short checklist to verify the result.',
   ].join('\n');
 }
 
 function Modal({ title, subtitle, onClose, children, wide = false }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 p-4 backdrop-blur-sm">
-      <div
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+      <section
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -284,9 +248,11 @@ function Modal({ title, subtitle, onClose, children, wide = false }) {
       >
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-xl font-bold text-slate-900">{title}</h2>
+            <h2 className="text-xl font-bold">{title}</h2>
             {subtitle && (
-              <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {subtitle}
+              </p>
             )}
           </div>
           <button
@@ -299,18 +265,7 @@ function Modal({ title, subtitle, onClose, children, wide = false }) {
           </button>
         </div>
         {children}
-      </div>
-    </div>
-  );
-}
-
-function ProgressBar({ value }) {
-  return (
-    <div className="h-2.5 overflow-hidden rounded-full bg-slate-100">
-      <div
-        className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all"
-        style={{ width: `${value}%` }}
-      />
+      </section>
     </div>
   );
 }
@@ -320,33 +275,39 @@ export default function App() {
     'vibetracker.tasks',
     STARTER_TASKS
   );
+
   const [team, setTeam] = useLocalStorage(
     'vibetracker.team',
     ['Rishy Winayagarajah']
   );
+
   const [anchors, setAnchors] = useLocalStorage(
     'vibetracker.anchors',
     []
   );
 
   const [page, setPage] = useState('overview');
+
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(blankTask());
+  const [taskForm, setTaskForm] = useState(emptyTask());
+  const [taskMessage, setTaskMessage] = useState('');
 
   const [teamOpen, setTeamOpen] = useState(false);
   const [memberName, setMemberName] = useState('');
   const [teamError, setTeamError] = useState('');
 
   const [editingAnchor, setEditingAnchor] = useState(null);
-  const [anchorForm, setAnchorForm] = useState(blankAnchor());
+  const [anchorForm, setAnchorForm] = useState(emptyAnchor());
+  const [anchorError, setAnchorError] = useState('');
 
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [taskFilter, setTaskFilter] = useState('all');
 
-  const [studioTaskId, setStudioTaskId] = useState('');
-  const [studioMode, setStudioMode] = useState('build');
-  const [studioMessage, setStudioMessage] = useState('');
-  const [taskMessage, setTaskMessage] = useState('');
+  const [request, setRequest] = useState('');
+  const [promptTaskId, setPromptTaskId] = useState('');
+  const [mode, setMode] = useState('build');
+  const [prompt, setPrompt] = useState('');
+  const [promptMessage, setPromptMessage] = useState('');
 
   const completed = tasks.filter(
     (task) => task.status === 'done'
@@ -357,68 +318,47 @@ export default function App() {
   ).length;
 
   const overdue = tasks.filter(
-    (task) => dueState(task) === 'overdue'
+    (task) => deadline(task) === 'overdue'
   ).length;
 
-  const completion = tasks.length
+  const percent = tasks.length
     ? Math.round((completed / tasks.length) * 100)
     : 0;
 
-  const filteredTasks = useMemo(
-    () =>
-      tasks.filter((task) => {
-        const query = search.toLowerCase().trim();
-
-        const matchesSearch =
-          !query ||
-          [
-            task.title,
-            task.description,
-            task.assignee,
-            task.context,
-          ]
-            .join(' ')
-            .toLowerCase()
-            .includes(query);
-
-        const matchesFilter =
-          filter === 'all' ||
-          (filter === 'overdue'
-            ? dueState(task) === 'overdue'
-            : filter === 'mine'
-              ? task.assignee === team[0]
-              : task.type === filter);
-
-        return matchesSearch && matchesFilter;
-      }),
-    [tasks, search, filter, team]
+  const selectedTask = tasks.find(
+    (task) => String(task.id) === promptTaskId
   );
 
-  const studioTask = tasks.find(
-    (task) => String(task.id) === studioTaskId
-  );
+  const navigation = [
+    { id: 'overview', label: 'Overview', icon: '◈' },
+    { id: 'board', label: 'Task Board', icon: '▦' },
+    { id: 'ai', label: 'AI Studio', icon: '✦' },
+    { id: 'deliverables', label: 'Deliverables', icon: '◫' },
+  ];
 
-  const activeStudioId = studioTask
-    ? studioTaskId
-    : tasks.length
-      ? String(tasks[0].id)
-      : '';
-
-  const activeStudioTask = tasks.find(
-    (task) => String(task.id) === activeStudioId
-  );
-
-  const prompt = makePrompt(
-    activeStudioTask,
-    studioMode,
-    anchors,
-    tasks
-  );
+  const headings = {
+    overview: [
+      'Project Overview',
+      'Everything important about your project at a glance.',
+    ],
+    board: [
+      'Task Board',
+      'Manage your work from idea to completion.',
+    ],
+    ai: [
+      'AI Prompt Studio',
+      'Turn your ideas into better prompts, right here.',
+    ],
+    deliverables: [
+      'Project Deliverables',
+      'Your important documents and links in one place.',
+    ],
+  };
 
   function newTask() {
     setTaskMessage('');
-    setForm({
-      ...blankTask(),
+    setTaskForm({
+      ...emptyTask(),
       assignee: team[0] || '',
     });
     setEditing({ id: null });
@@ -426,8 +366,8 @@ export default function App() {
 
   function editTask(task) {
     setTaskMessage('');
-    setForm({
-      ...blankTask(),
+    setTaskForm({
+      ...emptyTask(),
       ...task,
       dueDate: task.dueDate || '',
     });
@@ -437,17 +377,17 @@ export default function App() {
   function saveTask(event) {
     event.preventDefault();
 
-    if (!form.title.trim()) return;
+    if (!taskForm.title.trim()) return;
 
     const saved = {
-      ...form,
-      title: form.title.trim(),
-      description: form.description.trim(),
-      context: form.context.trim(),
-      aiTool: form.aiTool.trim(),
-      aiPrompt: form.aiPrompt.trim(),
-      aiOutcome: form.aiOutcome.trim(),
-      dueDate: form.dueDate || null,
+      ...taskForm,
+      title: taskForm.title.trim(),
+      description: taskForm.description.trim(),
+      context: taskForm.context.trim(),
+      aiTool: taskForm.aiTool.trim(),
+      aiPrompt: taskForm.aiPrompt.trim(),
+      aiOutcome: taskForm.aiOutcome.trim(),
+      dueDate: taskForm.dueDate || null,
     };
 
     if (editing.id === null) {
@@ -462,7 +402,9 @@ export default function App() {
     } else {
       setTasks((current) =>
         current.map((task) =>
-          task.id === editing.id ? { ...task, ...saved } : task
+          task.id === editing.id
+            ? { ...task, ...saved }
+            : task
         )
       );
     }
@@ -511,7 +453,7 @@ export default function App() {
   function removeMember(name) {
     if (tasks.some((task) => task.assignee === name)) {
       setTeamError(
-        'Reassign their tasks before removing them.'
+        'Reassign their tasks before removing this member.'
       );
       return;
     }
@@ -523,7 +465,8 @@ export default function App() {
   }
 
   function newAnchor() {
-    setAnchorForm(blankAnchor());
+    setAnchorForm(emptyAnchor());
+    setAnchorError('');
     setEditingAnchor({ id: null });
   }
 
@@ -533,6 +476,7 @@ export default function App() {
       description: anchor.description || '',
       url: anchor.url || '',
     });
+    setAnchorError('');
     setEditingAnchor(anchor);
   }
 
@@ -548,14 +492,19 @@ export default function App() {
     if (!saved.title) return;
 
     if (saved.url && !safeLink(saved.url)) {
-      window.alert('Enter a valid http:// or https:// link.');
+      setAnchorError(
+        'Please enter a valid http:// or https:// link.'
+      );
       return;
     }
 
     if (editingAnchor.id === null) {
       setAnchors((current) => [
         ...current,
-        { ...saved, id: crypto.randomUUID() },
+        {
+          ...saved,
+          id: crypto.randomUUID(),
+        },
       ]);
     } else {
       setAnchors((current) =>
@@ -585,504 +534,389 @@ export default function App() {
     try {
       await navigator.clipboard.writeText(text);
       feedback('Copied to clipboard!');
-      return true;
     } catch {
       feedback(
-        'Clipboard unavailable. Select the text and copy manually.'
+        'Clipboard unavailable. Select the text and copy it manually.'
       );
-      return false;
     }
   }
 
   function openStudio(task) {
-    if (task) setStudioTaskId(String(task.id));
-    setStudioMessage('');
+    if (task) {
+      setPromptTaskId(String(task.id));
+      setRequest(`Help me with: ${task.title}`);
+    }
+    setPrompt('');
+    setPromptMessage('');
     setPage('ai');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  async function openChatGPT() {
-    if (!prompt) return;
-
-    const copied = await copyText(prompt, setStudioMessage);
-
-    if (copied) {
-      window.open(
-        'https://chatgpt.com/',
-        '_blank',
-        'noopener,noreferrer'
-      );
+  function makeNewPrompt() {
+    if (!request.trim()) {
+      setPromptMessage('Write what you need help with first.');
+      return;
     }
+
+    setPrompt(
+      generatePrompt(request, selectedTask, mode, anchors)
+    );
+
+    setPromptMessage(
+      'Prompt generated! You can edit it before copying.'
+    );
   }
 
-  const stats = [
-    {
-      title: 'Total tasks',
-      value: tasks.length,
-      note: 'Across your project',
-      colour: 'text-indigo-600',
-      symbol: '▦',
-    },
-    {
-      title: 'In progress',
-      value: inProgress,
-      note: 'Currently being worked on',
-      colour: 'text-blue-600',
-      symbol: '↗',
-    },
-    {
-      title: 'Completed',
-      value: completed,
-      note: `${completion}% of all tasks`,
-      colour: 'text-emerald-600',
-      symbol: '✓',
-    },
-    {
-      title: 'Overdue',
-      value: overdue,
-      note: 'Needs attention',
-      colour: 'text-rose-600',
-      symbol: '!',
-    },
-  ];
+  const visibleTasks = tasks.filter((task) => {
+    const matchesSearch = [
+      task.title,
+      task.description,
+      task.assignee,
+      task.context,
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(search.toLowerCase());
+
+    const matchesFilter =
+      taskFilter === 'all' ||
+      (taskFilter === 'overdue'
+        ? deadline(task) === 'overdue'
+        : taskFilter === 'mine'
+          ? task.assignee === team[0]
+          : task.type === taskFilter);
+
+    return matchesSearch && matchesFilter;
+  });
 
   return (
     <div className="min-h-screen bg-[#f5f7fb] text-slate-900">
-      {/* DARK NAVBAR */}
-      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0b1120] text-white shadow-xl">
-        <div className="mx-auto max-w-[1600px] px-5 lg:px-8">
-          <div className="flex min-h-[76px] flex-wrap items-center justify-between gap-4 py-3">
+      {/* DARK NAVIGATION */}
+      <header className="sticky top-0 z-30 border-b border-white/10 bg-[#0c1426] text-white shadow-lg">
+        <div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-8">
+          <button
+            type="button"
+            onClick={() => setPage('overview')}
+            className="flex items-center gap-3 text-left"
+          >
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-2xl font-black shadow-lg shadow-indigo-500/20">
+              F
+            </span>
+            <span>
+              <span className="block text-xl font-extrabold tracking-tight">
+                Flow
+                <span className="text-indigo-400">
+                  State
+                </span>
+              </span>
+              <span className="block text-[10px] font-semibold tracking-widest text-slate-400">
+                PROJECT TRACKER
+              </span>
+            </span>
+          </button>
+
+          <nav
+            aria-label="Main navigation"
+            className="order-3 flex w-full gap-1 overflow-x-auto md:order-2 md:w-auto"
+          >
+            {navigation.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setPage(item.id)}
+                className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                  page === item.id
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                <span className="mr-2">{item.icon}</span>
+                {item.label}
+              </button>
+            ))}
+          </nav>
+
+          <div className="order-2 flex items-center gap-2 md:order-3">
             <button
               type="button"
-              onClick={() => setPage('overview')}
-              className="flex items-center gap-3 text-left"
+              onClick={() => setTeamOpen(true)}
+              className="rounded-xl border border-white/15 px-3 py-2.5 text-xs font-bold text-slate-200 hover:bg-white/10"
             >
-              <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-2xl font-bold shadow-lg shadow-indigo-500/20">
-                F
-              </span>
-              <span>
-                <span className="block text-xl font-extrabold tracking-tight">
-                  Flow<span className="text-indigo-400">State</span>
-                </span>
-                <span className="block text-[11px] font-medium tracking-wide text-slate-400">
-                  VIBECODING PROJECT TRACKER
-                </span>
-              </span>
+              Team · {team.length}
             </button>
 
-            <nav
-              aria-label="Main navigation"
-              className="order-3 flex w-full gap-1 overflow-x-auto pb-1 md:order-2 md:w-auto md:pb-0"
+            <button
+              type="button"
+              onClick={newTask}
+              className="rounded-xl bg-indigo-600 px-4 py-2.5 text-xs font-bold hover:bg-indigo-500"
             >
-              {NAV.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setPage(item.id)}
-                  className={`shrink-0 rounded-xl px-3.5 py-2.5 text-sm font-semibold transition ${
-                    page === item.id
-                      ? 'bg-indigo-600 text-white shadow-md'
-                      : 'text-slate-400 hover:bg-white/10 hover:text-white'
-                  }`}
-                >
-                  <span className="mr-2">{item.icon}</span>
-                  {item.label}
-                </button>
-              ))}
-            </nav>
-
-            <div className="order-2 flex items-center gap-2 md:order-3">
-              <button
-                type="button"
-                onClick={() => setTeamOpen(true)}
-                className="hidden rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-slate-200 hover:bg-white/10 sm:block"
-              >
-                Team · {team.length}
-              </button>
-              <button
-                type="button"
-                onClick={newTask}
-                className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-500"
-              >
-                + New Task
-              </button>
-            </div>
+              + New Task
+            </button>
           </div>
         </div>
       </header>
 
-      <div className="mx-auto max-w-[1600px] px-5 py-8 lg:px-8">
-        {/* PAGE INTRO */}
-        <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="mb-2 flex items-center gap-2">
-              <span className="h-2 w-2 rounded-full bg-emerald-500" />
-              <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">
-                Project workspace
-              </span>
-            </div>
-
-            <h1 className="text-3xl font-extrabold tracking-tight text-slate-950 md:text-4xl">
-              {page === 'overview' && 'Your project, in flow.'}
-              {page === 'board' && 'Task Board'}
-              {page === 'ai' && 'AI Studio'}
-              {page === 'deliverables' && 'Project Deliverables'}
-            </h1>
-
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              {page === 'overview' &&
-                'A clear view of your progress, priorities and next steps.'}
-              {page === 'board' &&
-                'Plan, assign and move work through your four-stage workflow.'}
-              {page === 'ai' &&
-                'Turn your project knowledge into useful prompts for ChatGPT.'}
-              {page === 'deliverables' &&
-                'Keep important links, documents and final outputs together.'}
-            </p>
-          </div>
-
-          <span className="rounded-full border border-indigo-100 bg-indigo-50 px-4 py-2 text-xs font-bold text-indigo-700">
-            ✦ AI-ready workspace
-          </span>
+      <main className="mx-auto max-w-[1500px] px-5 py-8 lg:px-8">
+        {/* PAGE HEADING */}
+        <div className="mb-8">
+          <p className="mb-2 text-xs font-bold uppercase tracking-[0.16em] text-indigo-600">
+            FlowState Workspace
+          </p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-slate-950">
+            {headings[page][0]}
+          </h1>
+          <p className="mt-2 text-sm text-slate-500">
+            {headings[page][1]}
+          </p>
         </div>
 
         {/* OVERVIEW */}
         {page === 'overview' && (
-          <div className="space-y-7">
+          <div className="space-y-6">
             <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-              {stats.map((stat) => (
+              {[
+                {
+                  name: 'Total Tasks',
+                  value: tasks.length,
+                  colour: 'text-indigo-600',
+                  icon: '▦',
+                },
+                {
+                  name: 'In Progress',
+                  value: inProgress,
+                  colour: 'text-blue-600',
+                  icon: '↗',
+                },
+                {
+                  name: 'Completed',
+                  value: completed,
+                  colour: 'text-emerald-600',
+                  icon: '✓',
+                },
+                {
+                  name: 'Overdue',
+                  value: overdue,
+                  colour: 'text-rose-600',
+                  icon: '!',
+                },
+              ].map((stat) => (
                 <div
-                  key={stat.title}
-                  className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm"
+                  key={stat.name}
+                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm"
                 >
-                  <div className="mb-4 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-500">
-                      {stat.title}
-                    </span>
-                    <span className={`text-xl font-bold ${stat.colour}`}>
-                      {stat.symbol}
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm font-semibold text-slate-500">
+                      {stat.name}
+                    </p>
+                    <span
+                      className={`text-xl font-bold ${stat.colour}`}
+                    >
+                      {stat.icon}
                     </span>
                   </div>
-                  <p className="text-4xl font-extrabold tracking-tight">
+                  <p
+                    className={`mt-4 text-4xl font-extrabold ${stat.colour}`}
+                  >
                     {stat.value}
-                  </p>
-                  <p className="mt-2 text-xs text-slate-500">
-                    {stat.note}
                   </p>
                 </div>
               ))}
             </section>
 
-            <div className="grid gap-5 lg:grid-cols-3">
-              <section className="rounded-2xl bg-gradient-to-br from-[#111b35] via-[#18234a] to-[#352475] p-7 text-white shadow-lg lg:col-span-2">
-                <div className="mb-7 flex items-center justify-between">
-                  <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-semibold text-indigo-100">
-                    PROJECT HEALTH
+            <section className="rounded-2xl bg-gradient-to-r from-[#14203c] to-[#33276e] p-7 text-white shadow-lg">
+              <div className="flex flex-wrap items-end justify-between gap-5">
+                <div>
+                  <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-indigo-200">
+                    PROJECT PROGRESS
                   </span>
-                  <span className="text-xs text-indigo-200">
-                    Live from your board
-                  </span>
+                  <h2 className="mt-5 text-2xl font-extrabold">
+                    Keep the momentum going.
+                  </h2>
+                  <p className="mt-2 text-sm text-indigo-100">
+                    {completed} of {tasks.length} tasks completed.
+                  </p>
                 </div>
+                <span className="text-4xl font-extrabold">
+                  {percent}%
+                </span>
+              </div>
 
-                <h2 className="text-2xl font-bold">
-                  Keep the momentum going.
+              <div className="mt-6 h-3 overflow-hidden rounded-full bg-white/20">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-indigo-300 to-violet-300 transition-all"
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setPage('board')}
+                className="mt-6 rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-indigo-900 hover:bg-indigo-50"
+              >
+                Open Task Board →
+              </button>
+            </section>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-5 flex items-center justify-between">
+                <h2 className="text-lg font-bold">
+                  Current Priorities
                 </h2>
-                <p className="mt-2 max-w-lg text-sm leading-6 text-indigo-100">
-                  Track what has been finished, identify blockers
-                  and keep your next development steps clear.
-                </p>
+                <button
+                  type="button"
+                  onClick={() => setPage('board')}
+                  className="text-sm font-bold text-indigo-600 hover:underline"
+                >
+                  View Board →
+                </button>
+              </div>
 
-                <div className="mt-8 flex items-end justify-between">
-                  <span className="text-sm font-semibold text-indigo-100">
-                    Overall completion
-                  </span>
-                  <span className="text-3xl font-extrabold">
-                    {completion}%
-                  </span>
-                </div>
-
-                <div className="mt-3 h-3 overflow-hidden rounded-full bg-white/20">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-indigo-300 to-violet-300 transition-all"
-                    style={{ width: `${completion}%` }}
-                  />
-                </div>
-
-                <div className="mt-7 flex flex-wrap gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setPage('board')}
-                    className="rounded-xl bg-white px-4 py-2.5 text-sm font-bold text-indigo-900 hover:bg-indigo-50"
-                  >
-                    Open Task Board →
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => openStudio()}
-                    className="rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 text-sm font-bold text-white hover:bg-white/20"
-                  >
-                    ✦ Open AI Studio
-                  </button>
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-bold">Workflow breakdown</h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Your tasks across each stage
-                </p>
-
-                <div className="mt-6 space-y-5">
-                  {STAGES.map((stage) => {
-                    const count = tasks.filter(
-                      (task) => task.status === stage.id
-                    ).length;
-                    const percent = tasks.length
-                      ? (count / tasks.length) * 100
-                      : 0;
-
-                    return (
-                      <div key={stage.id}>
-                        <div className="mb-2 flex justify-between text-sm">
-                          <span className="font-medium text-slate-700">
-                            {stage.label}
-                          </span>
-                          <span className="font-bold text-slate-900">
-                            {count}
-                          </span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                          <div
-                            className={`h-full rounded-full ${stage.colour}`}
-                            style={{ width: `${percent}%` }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </section>
-            </div>
-
-            <div className="grid gap-5 lg:grid-cols-3">
-              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm lg:col-span-2">
-                <div className="mb-5 flex items-center justify-between">
-                  <h2 className="text-lg font-bold">Current priorities</h2>
-                  <button
-                    type="button"
-                    onClick={() => setPage('board')}
-                    className="text-sm font-semibold text-indigo-600 hover:underline"
-                  >
-                    View all →
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {tasks
-                    .filter((task) => task.status !== 'done')
-                    .sort((a, b) => {
-                      const order = { overdue: 0, soon: 1, normal: 2 };
-                      return order[dueState(a)] - order[dueState(b)];
-                    })
-                    .slice(0, 4)
-                    .map((task) => (
-                      <button
-                        key={task.id}
-                        type="button"
-                        onClick={() => editTask(task)}
-                        className="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-100 p-4 text-left transition hover:border-indigo-200 hover:bg-indigo-50/40"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-bold text-slate-900">
-                            {task.title}
-                          </p>
-                          <p className="mt-1 text-xs text-slate-500">
-                            {stageLabel(task.status)} ·{' '}
-                            {task.assignee || 'Unassigned'}
-                          </p>
-                        </div>
-                        <span
-                          className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${
-                            dueState(task) === 'overdue'
-                              ? 'bg-red-100 text-red-700'
-                              : dueState(task) === 'soon'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {dueState(task) === 'overdue'
-                            ? 'Overdue'
-                            : dueState(task) === 'soon'
-                              ? 'Due soon'
-                              : 'On track'}
-                        </span>
-                      </button>
-                    ))}
-
-                  {tasks.every((task) => task.status === 'done') && (
-                    <p className="rounded-xl bg-emerald-50 p-5 text-sm text-emerald-700">
-                      All tasks are complete. Nice work!
-                    </p>
-                  )}
-                </div>
-              </section>
-
-              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="text-lg font-bold">Quick access</h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Everything your project needs
-                </p>
-
-                <div className="mt-5 space-y-3">
-                  {[
-                    {
-                      title: 'AI Prompt Studio',
-                      subtitle: 'Build a project-aware prompt',
-                      page: 'ai',
-                      icon: '✦',
-                    },
-                    {
-                      title: 'Project Deliverables',
-                      subtitle: `${anchors.length} pinned references`,
-                      page: 'deliverables',
-                      icon: '◫',
-                    },
-                    {
-                      title: 'Team Management',
-                      subtitle: `${team.length} team members`,
-                      page: 'team',
-                      icon: '◉',
-                    },
-                  ].map((item) => (
+              <div className="space-y-3">
+                {tasks
+                  .filter((task) => task.status !== 'done')
+                  .slice(0, 4)
+                  .map((task) => (
                     <button
-                      key={item.title}
+                      key={task.id}
                       type="button"
-                      onClick={() =>
-                        item.page === 'team'
-                          ? setTeamOpen(true)
-                          : setPage(item.page)
-                      }
-                      className="flex w-full items-center gap-3 rounded-xl bg-slate-50 p-4 text-left hover:bg-indigo-50"
+                      onClick={() => editTask(task)}
+                      className="flex w-full items-center justify-between gap-4 rounded-xl border border-slate-100 p-4 text-left transition hover:border-indigo-200 hover:bg-indigo-50/40"
                     >
-                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-100 text-lg text-indigo-600">
-                        {item.icon}
-                      </span>
-                      <span>
-                        <span className="block text-sm font-bold">
-                          {item.title}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {item.subtitle}
-                        </span>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold">
+                          {task.title}
+                        </p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {task.assignee || 'Unassigned'}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600">
+                        {STAGES.find(
+                          (stage) => stage.id === task.status
+                        )?.label}
                       </span>
                     </button>
                   ))}
-                </div>
-              </section>
-            </div>
+
+                {tasks.every((task) => task.status === 'done') && (
+                  <p className="rounded-xl bg-emerald-50 p-5 text-sm text-emerald-700">
+                    All tasks are complete!
+                  </p>
+                )}
+              </div>
+            </section>
           </div>
         )}
 
         {/* TASK BOARD */}
         {page === 'board' && (
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <div className="space-y-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-1 flex-wrap gap-3">
                 <input
                   aria-label="Search tasks"
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
-                  placeholder="Search tasks, owners, context..."
-                  className={`${input} max-w-sm flex-1`}
+                  onChange={(event) =>
+                    setSearch(event.target.value)
+                  }
+                  placeholder="Search tasks..."
+                  className={`${field} max-w-sm`}
                 />
 
                 <select
                   aria-label="Filter tasks"
-                  value={filter}
-                  onChange={(event) => setFilter(event.target.value)}
-                  className={`${input} max-w-[180px]`}
+                  value={taskFilter}
+                  onChange={(event) =>
+                    setTaskFilter(event.target.value)
+                  }
+                  className={`${field} max-w-[170px]`}
                 >
-                  <option value="all">All tasks</option>
-                  <option value="mine">My tasks</option>
+                  <option value="all">All Tasks</option>
+                  <option value="mine">My Tasks</option>
                   <option value="feature">Features</option>
                   <option value="bug">Bugs</option>
                   <option value="overdue">Overdue</option>
                 </select>
               </div>
 
-              <span className="text-xs font-semibold text-slate-500">
-                {filteredTasks.length} tasks shown
-              </span>
+              <button
+                type="button"
+                onClick={newTask}
+                className={primary}
+              >
+                + Add Task
+              </button>
             </div>
 
             <div className="flex flex-wrap gap-3 text-xs font-semibold">
-              <span className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-slate-500">
+              <span className="rounded-full bg-white px-3 py-2 text-slate-500">
                 ● Normal
               </span>
-              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1.5 text-amber-700">
-                ● Due within 3 days
+              <span className="rounded-full bg-amber-50 px-3 py-2 text-amber-700">
+                ● Due Soon
               </span>
-              <span className="rounded-full border border-red-200 bg-red-50 px-3 py-1.5 text-red-700">
+              <span className="rounded-full bg-red-50 px-3 py-2 text-red-700">
                 ● Overdue
               </span>
             </div>
 
-            <main className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {STAGES.map((stage) => {
-                const columnTasks = filteredTasks.filter(
+                const stageTasks = visibleTasks.filter(
                   (task) => task.status === stage.id
                 );
 
                 return (
                   <section
                     key={stage.id}
-                    className="min-h-[440px] rounded-2xl border border-slate-200 bg-[#edf1f7] p-3"
+                    className="min-h-[420px] rounded-2xl border border-slate-200 bg-[#edf1f7] p-3"
                   >
                     <div className="mb-4 flex items-center justify-between px-2 pt-2">
-                      <div className="flex items-center gap-2">
+                      <h2 className="flex items-center gap-2 text-sm font-extrabold">
                         <span
-                          className={`h-2.5 w-2.5 rounded-full ${stage.colour}`}
+                          className={`h-2.5 w-2.5 rounded-full ${stage.dot}`}
                         />
-                        <h2 className="text-sm font-extrabold">
-                          {stage.label}
-                        </h2>
-                      </div>
+                        {stage.label}
+                      </h2>
                       <span className="rounded-lg bg-white px-2.5 py-1 text-xs font-bold text-slate-500">
-                        {columnTasks.length}
+                        {stageTasks.length}
                       </span>
                     </div>
 
                     <div className="space-y-3">
-                      {columnTasks.map((task) => {
-                        const deadline = dueState(task);
+                      {stageTasks.map((task) => {
+                        const state = deadline(task);
 
                         return (
                           <article
                             key={task.id}
-                            className={`rounded-2xl border bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                              deadline === 'overdue'
-                                ? 'border-red-300 bg-red-50/70'
-                                : deadline === 'soon'
-                                  ? 'border-amber-300 bg-amber-50/70'
-                                  : 'border-slate-200'
+                            className={`rounded-xl border p-4 shadow-sm transition hover:shadow-md ${
+                              state === 'overdue'
+                                ? 'border-red-300 bg-red-50'
+                                : state === 'soon'
+                                  ? 'border-amber-300 bg-amber-50'
+                                  : 'border-slate-200 bg-white'
                             }`}
                           >
-                            <div className="mb-3 flex items-center justify-between gap-2">
+                            <div className="mb-3 flex items-start justify-between gap-2">
                               <span
-                                className={`rounded-md px-2 py-1 text-[10px] font-extrabold uppercase tracking-wide ${
+                                className={`rounded-md px-2 py-1 text-[10px] font-bold uppercase ${
                                   task.type === 'bug'
-                                    ? 'bg-rose-100 text-rose-700'
+                                    ? 'bg-red-100 text-red-700'
                                     : 'bg-indigo-100 text-indigo-700'
                                 }`}
                               >
-                                {task.type === 'bug' ? 'Bug' : 'Feature'}
+                                {task.type === 'bug'
+                                  ? 'Bug'
+                                  : 'Feature'}
                               </span>
+
                               <button
                                 type="button"
                                 onClick={() => editTask(task)}
-                                className="text-xs font-bold text-slate-400 hover:text-indigo-600"
+                                className="text-xs font-bold text-indigo-600 hover:underline"
                               >
-                                Edit ↗
+                                Edit
                               </button>
                             </div>
 
@@ -1091,74 +925,73 @@ export default function App() {
                               onClick={() => editTask(task)}
                               className="w-full text-left"
                             >
-                              <h3 className="break-words text-sm font-extrabold leading-6 text-slate-900">
+                              <h3 className="break-words text-sm font-extrabold leading-6">
                                 {task.title}
                               </h3>
                               <p className="mt-1 line-clamp-3 text-xs leading-5 text-slate-500">
-                                {task.description || 'No description yet.'}
+                                {task.description ||
+                                  'No description yet.'}
                               </p>
                             </button>
 
                             {task.context && (
-                              <div className="mt-3 rounded-xl bg-indigo-50 p-3">
-                                <p className="mb-1 text-[10px] font-extrabold uppercase tracking-wide text-indigo-600">
+                              <div className="mt-3 rounded-lg bg-indigo-50 p-3">
+                                <p className="mb-1 text-[10px] font-extrabold uppercase text-indigo-600">
                                   ✦ AI Context
                                 </p>
-                                <p className="line-clamp-2 whitespace-pre-wrap text-xs text-indigo-800">
+                                <p className="line-clamp-2 whitespace-pre-wrap text-xs text-indigo-700">
                                   {task.context}
                                 </p>
                               </div>
                             )}
 
-                            {(task.aiTool || task.aiOutcome) && (
-                              <div className="mt-3 rounded-lg bg-violet-50 px-3 py-2 text-xs text-violet-700">
-                                ✦ AI workflow recorded
-                              </div>
-                            )}
-
                             {task.dueDate && (
                               <p
-                                className={`mt-3 text-xs font-bold ${
-                                  deadline === 'overdue'
+                                className={`mt-3 text-xs font-semibold ${
+                                  state === 'overdue'
                                     ? 'text-red-600'
-                                    : deadline === 'soon'
+                                    : state === 'soon'
                                       ? 'text-amber-700'
                                       : 'text-slate-500'
                                 }`}
                               >
-                                ◷ {prettyDate(task.dueDate)}
-                                {deadline === 'overdue' && ' · Overdue'}
-                                {deadline === 'soon' && ' · Due soon'}
+                                ◷ {formatDate(task.dueDate)}
+                                {state === 'overdue'
+                                  ? ' · Overdue'
+                                  : state === 'soon'
+                                    ? ' · Due Soon'
+                                    : ''}
                               </p>
                             )}
 
-                            <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3">
-                              <div className="flex min-w-0 items-center gap-2">
-                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-extrabold text-indigo-700">
-                                  {initials(task.assignee)}
-                                </span>
-                                <span className="truncate text-xs font-medium text-slate-500">
-                                  {task.assignee || 'Unassigned'}
-                                </span>
-                              </div>
+                            <div className="mt-4 flex items-center gap-2 border-t border-slate-200 pt-3">
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-[10px] font-bold text-indigo-700">
+                                {initials(task.assignee)}
+                              </span>
+                              <span className="min-w-0 truncate text-xs text-slate-500">
+                                {task.assignee || 'Unassigned'}
+                              </span>
                             </div>
 
                             <div className="mt-3 grid grid-cols-2 gap-2">
                               <button
                                 type="button"
                                 onClick={() => openStudio(task)}
-                                className="rounded-lg bg-indigo-50 px-2 py-2 text-[11px] font-bold text-indigo-700 hover:bg-indigo-100"
+                                className="rounded-lg bg-indigo-50 px-2 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-100"
                               >
-                                ✦ Ask AI
+                                ✦ AI Prompt
                               </button>
 
                               <select
-                                aria-label={`Move ${task.title} to another stage`}
+                                aria-label={`Move ${task.title}`}
                                 value={task.status}
                                 onChange={(event) =>
-                                  moveTask(task.id, event.target.value)
+                                  moveTask(
+                                    task.id,
+                                    event.target.value
+                                  )
                                 }
-                                className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-[11px] font-semibold text-slate-600"
+                                className="min-w-0 rounded-lg border border-slate-200 bg-white px-2 py-2 text-xs text-slate-600"
                               >
                                 {STAGES.map((option) => (
                                   <option
@@ -1174,62 +1007,105 @@ export default function App() {
                         );
                       })}
 
-                      {columnTasks.length === 0 && (
-                        <div className="rounded-xl border-2 border-dashed border-slate-200 bg-white/60 p-6 text-center text-xs text-slate-400">
+                      {stageTasks.length === 0 && (
+                        <p className="rounded-xl border border-dashed border-slate-300 p-5 text-center text-xs text-slate-400">
                           No tasks here yet.
-                        </div>
+                        </p>
                       )}
                     </div>
                   </section>
                 );
               })}
-            </main>
+            </div>
           </div>
         )}
 
-        {/* AI STUDIO */}
+        {/* AI PROMPT STUDIO */}
         {page === 'ai' && (
-          <div className="space-y-6">
-            <section className="overflow-hidden rounded-2xl bg-gradient-to-r from-[#111b35] to-[#352475] p-7 text-white">
-              <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-bold text-indigo-200">
-                ✦ FLOWSTATE SECRET SAUCE
+          <div className="mx-auto max-w-4xl space-y-5">
+            <section className="rounded-2xl bg-gradient-to-r from-[#14203c] to-[#33276e] p-6 text-white">
+              <span className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-bold text-indigo-200">
+                ✦ FLOWSTATE AI
               </span>
               <h2 className="mt-4 text-2xl font-extrabold">
-                Your project context. Better AI prompts.
+                What are we building today?
               </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-indigo-100">
-                Most task boards stop at tracking work. FlowState
-                helps you turn that work into useful AI
-                instructions, while keeping a record of the
-                prompts, tools and outcomes behind your project.
+              <p className="mt-2 text-sm leading-6 text-indigo-100">
+                Describe your idea and FlowState will create a
+                structured prompt using your project context.
               </p>
             </section>
 
-            <div className="grid gap-6 xl:grid-cols-5">
-              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-2">
-                <h2 className="text-lg font-extrabold">
-                  Build your prompt
-                </h2>
-                <p className="mt-1 text-sm text-slate-500">
-                  Start with a task and choose what you need.
-                </p>
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <label
+                htmlFor="ai-request"
+                className="mb-2 block text-sm font-bold"
+              >
+                Your request
+              </label>
 
-                <div className="mt-6">
-                  <label className={label} htmlFor="studio-task">
-                    1. Select a task
-                  </label>
-                  <select
-                    id="studio-task"
-                    className={input}
-                    value={activeStudioId}
-                    onChange={(event) => {
-                      setStudioTaskId(event.target.value);
-                      setStudioMessage('');
-                    }}
+              <textarea
+                id="ai-request"
+                rows={5}
+                value={request}
+                onChange={(event) =>
+                  setRequest(event.target.value)
+                }
+                placeholder="e.g. Help me make my Kanban board responsive on mobile, keeping the same design and functionality..."
+                className={`${field} resize-y`}
+              />
+
+              <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    htmlFor="prompt-mode"
+                    className={label}
                   >
-                    {tasks.length === 0 && (
-                      <option value="">No tasks available</option>
-                    )}
+                    What kind of help?
+                  </label>
+
+                  <select
+                    id="prompt-mode"
+                    value={mode}
+                    onChange={(event) =>
+                      setMode(event.target.value)
+                    }
+                    className={field}
+                  >
+                    <option value="build">
+                      Build a Feature
+                    </option>
+                    <option value="debug">
+                      Fix a Bug
+                    </option>
+                    <option value="explain">
+                      Explain Something
+                    </option>
+                    <option value="plan">
+                      Plan Next Steps
+                    </option>
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="prompt-task"
+                    className={label}
+                  >
+                    Related Task (optional)
+                  </label>
+
+                  <select
+                    id="prompt-task"
+                    value={promptTaskId}
+                    onChange={(event) =>
+                      setPromptTaskId(event.target.value)
+                    }
+                    className={field}
+                  >
+                    <option value="">
+                      No Specific Task
+                    </option>
                     {tasks.map((task) => (
                       <option
                         key={task.id}
@@ -1240,139 +1116,110 @@ export default function App() {
                     ))}
                   </select>
                 </div>
+              </div>
 
-                <div className="mt-6">
-                  <p className={label}>2. Choose your AI goal</p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {MODES.map((mode) => (
-                      <button
-                        key={mode.id}
-                        type="button"
-                        onClick={() => {
-                          setStudioMode(mode.id);
-                          setStudioMessage('');
-                        }}
-                        className={`rounded-xl border p-4 text-left transition ${
-                          studioMode === mode.id
-                            ? 'border-indigo-500 bg-indigo-50 ring-2 ring-indigo-100'
-                            : 'border-slate-200 hover:border-indigo-200'
-                        }`}
-                      >
-                        <span
-                          className={`block text-sm font-extrabold ${
-                            studioMode === mode.id
-                              ? 'text-indigo-700'
-                              : 'text-slate-800'
-                          }`}
-                        >
-                          {mode.label}
-                        </span>
-                        <span className="mt-1 block text-xs leading-5 text-slate-500">
-                          {mode.description}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+              <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-500">
+                  ✓ Includes relevant project context
+                </p>
 
-                <div className="mt-6 rounded-xl bg-slate-50 p-4">
-                  <p className="text-xs font-extrabold uppercase tracking-wide text-slate-500">
-                    Automatically included
-                  </p>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {[
-                      'Task details',
-                      'AI context',
-                      'Project progress',
-                      `${anchors.length} deliverables`,
-                      'AI history',
-                    ].map((item) => (
-                      <span
-                        key={item}
-                        className="rounded-lg bg-white px-2.5 py-1.5 text-xs font-semibold text-indigo-700"
-                      >
-                        ✓ {item}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </section>
+                <button
+                  type="button"
+                  onClick={makeNewPrompt}
+                  className={primary}
+                >
+                  ✦ Generate Prompt
+                </button>
+              </div>
+            </section>
 
-              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm xl:col-span-3">
-                <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+            {prompt && (
+              <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <h2 className="text-lg font-extrabold">
-                      Generated prompt
+                    <h2 className="text-lg font-bold">
+                      Your Generated Prompt
                     </h2>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Ready to copy into your AI assistant.
+                    <p className="mt-1 text-xs text-slate-500">
+                      Edit anything before copying.
                     </p>
                   </div>
+
                   <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-700">
-                    ● Generated locally
+                    ✓ Ready to Use
                   </span>
                 </div>
 
                 <textarea
-                  aria-label="Generated AI prompt"
-                  readOnly
-                  rows={22}
+                  aria-label="Generated prompt"
+                  rows={16}
                   value={prompt}
-                  placeholder="Create a task to get started."
-                  className="w-full resize-y rounded-xl border border-slate-200 bg-[#0f172a] p-5 font-mono text-xs leading-6 text-slate-200 outline-none"
+                  onChange={(event) =>
+                    setPrompt(event.target.value)
+                  }
+                  className={`${field} resize-y font-mono text-xs leading-6`}
                 />
-
-                {studioMessage && (
-                  <p
-                    role="status"
-                    className="mt-3 text-sm font-semibold text-indigo-600"
-                  >
-                    {studioMessage}
-                  </p>
-                )}
 
                 <div className="mt-5 flex flex-wrap gap-3">
                   <button
                     type="button"
-                    disabled={!prompt}
                     onClick={() =>
-                      copyText(prompt, setStudioMessage)
+                      copyText(prompt, setPromptMessage)
                     }
                     className={primary}
                   >
                     Copy Prompt
                   </button>
+
                   <button
                     type="button"
-                    disabled={!prompt}
-                    onClick={openChatGPT}
-                    className="rounded-xl bg-[#0f172a] px-4 py-2.5 text-sm font-bold text-white hover:bg-slate-800 disabled:opacity-50"
+                    onClick={makeNewPrompt}
+                    className={secondary}
                   >
-                    ✦ Copy & Open ChatGPT ↗
+                    Regenerate
                   </button>
-                </div>
 
-                <p className="mt-4 text-xs leading-5 text-slate-500">
-                  ChatGPT opens in a new tab. Paste your copied
-                  prompt into the chat. FlowState does not send
-                  project data to an AI service automatically.
-                </p>
+                  <a
+                    href="https://chatgpt.com/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={secondary}
+                  >
+                    Open ChatGPT ↗
+                  </a>
+                </div>
               </section>
-            </div>
+            )}
+
+            {promptMessage && (
+              <p
+                role="status"
+                className="text-sm font-semibold text-indigo-600"
+              >
+                {promptMessage}
+              </p>
+            )}
+
+            <p className="text-center text-xs text-slate-400">
+              Prompts are created locally from your input and
+              project details. No API key is required.
+            </p>
           </div>
         )}
 
         {/* DELIVERABLES */}
         {page === 'deliverables' && (
           <div className="space-y-6">
-            <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div>
-                <h2 className="text-lg font-extrabold">
+                <h2 className="text-lg font-bold">
                   Project Anchor Board
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
-                  Pin your presentation, demo, report, GitHub
-                  repository and supporting documents.
+                  {anchors.length} pinned{' '}
+                  {anchors.length === 1
+                    ? 'deliverable'
+                    : 'deliverables'}
                 </p>
               </div>
 
@@ -1383,27 +1230,26 @@ export default function App() {
               >
                 + Add Deliverable
               </button>
-            </section>
+            </div>
 
             {anchors.length === 0 ? (
-              <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-white px-6 py-16 text-center">
-                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 text-3xl text-indigo-600">
+              <div className="rounded-2xl border-2 border-dashed border-indigo-200 bg-white p-12 text-center">
+                <span className="text-4xl text-indigo-600">
                   ◫
-                </div>
-                <h3 className="text-lg font-extrabold">
-                  Your project hub starts here
+                </span>
+                <h3 className="mt-4 text-lg font-extrabold">
+                  Nothing pinned yet
                 </h3>
-                <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-500">
-                  Add important links and deliverables so your
-                  team can find them quickly and your AI prompts
-                  can reference them.
+                <p className="mt-2 text-sm text-slate-500">
+                  Add your GitHub repo, project document,
+                  presentation or demo link.
                 </p>
                 <button
                   type="button"
                   onClick={newAnchor}
                   className={`${primary} mt-5`}
                 >
-                  Pin your first deliverable
+                  Add Your First Deliverable
                 </button>
               </div>
             ) : (
@@ -1413,10 +1259,11 @@ export default function App() {
                     key={anchor.id}
                     className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm transition hover:shadow-md"
                   >
-                    <div className="mb-5 flex items-start justify-between">
-                      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-50 text-2xl text-indigo-600">
+                    <div className="mb-4 flex items-start justify-between">
+                      <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-50 text-2xl text-indigo-600">
                         ◫
                       </span>
+
                       <button
                         type="button"
                         onClick={() => editAnchor(anchor)}
@@ -1429,9 +1276,10 @@ export default function App() {
                     <h3 className="break-words text-base font-extrabold">
                       {anchor.title}
                     </h3>
+
                     <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-slate-500">
                       {anchor.description ||
-                        'Pinned project reference'}
+                        'Pinned project resource'}
                     </p>
 
                     {safeLink(anchor.url) && (
@@ -1441,7 +1289,7 @@ export default function App() {
                         rel="noopener noreferrer"
                         className="mt-5 inline-block text-sm font-bold text-indigo-600 hover:underline"
                       >
-                        Open resource ↗
+                        Open Resource ↗
                       </a>
                     )}
                   </article>
@@ -1452,33 +1300,39 @@ export default function App() {
         )}
 
         <footer className="mt-12 border-t border-slate-200 py-6 text-center text-xs text-slate-400">
-          FlowState · Built for the Vibecoding Hackathon ·
-          React + Vite + Tailwind
+          FlowState · Vibecoding Project Tracker
         </footer>
-      </div>
+      </main>
 
-      {/* TASK MODAL */}
+      {/* ADD / EDIT TASK */}
       {editing !== null && (
         <Modal
-          title={editing.id === null ? 'Create Task' : 'Edit Task'}
-          subtitle="Keep your task details and AI development context together."
+          title={
+            editing.id === null
+              ? 'Create Task'
+              : 'Edit Task'
+          }
+          subtitle="Manage the task and keep its development context together."
           onClose={() => setEditing(null)}
           wide
         >
           <form onSubmit={saveTask} className="space-y-5">
             <div>
               <label htmlFor="task-title" className={label}>
-                Task title
+                Task Title
               </label>
               <input
                 id="task-title"
                 required
-                value={form.title}
+                value={taskForm.title}
                 onChange={(event) =>
-                  setForm({ ...form, title: event.target.value })
+                  setTaskForm({
+                    ...taskForm,
+                    title: event.target.value,
+                  })
                 }
-                className={input}
                 placeholder="What needs to be done?"
+                className={field}
               />
             </div>
 
@@ -1489,15 +1343,15 @@ export default function App() {
               <textarea
                 id="task-description"
                 rows={3}
-                value={form.description}
+                value={taskForm.description}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
+                  setTaskForm({
+                    ...taskForm,
                     description: event.target.value,
                   })
                 }
-                className={input}
                 placeholder="Describe the task..."
+                className={field}
               />
             </div>
 
@@ -1508,11 +1362,14 @@ export default function App() {
                 </label>
                 <select
                   id="task-type"
-                  value={form.type}
+                  value={taskForm.type}
                   onChange={(event) =>
-                    setForm({ ...form, type: event.target.value })
+                    setTaskForm({
+                      ...taskForm,
+                      type: event.target.value,
+                    })
                   }
-                  className={input}
+                  className={field}
                 >
                   <option value="feature">Feature</option>
                   <option value="bug">Bug</option>
@@ -1525,14 +1382,20 @@ export default function App() {
                 </label>
                 <select
                   id="task-status"
-                  value={form.status}
+                  value={taskForm.status}
                   onChange={(event) =>
-                    setForm({ ...form, status: event.target.value })
+                    setTaskForm({
+                      ...taskForm,
+                      status: event.target.value,
+                    })
                   }
-                  className={input}
+                  className={field}
                 >
                   {STAGES.map((stage) => (
-                    <option key={stage.id} value={stage.id}>
+                    <option
+                      key={stage.id}
+                      value={stage.id}
+                    >
                       {stage.label}
                     </option>
                   ))}
@@ -1541,28 +1404,33 @@ export default function App() {
 
               <div>
                 <label htmlFor="task-owner" className={label}>
-                  Assigned to
+                  Assigned To
                 </label>
                 <select
                   id="task-owner"
-                  value={form.assignee}
+                  value={taskForm.assignee}
                   onChange={(event) =>
-                    setForm({
-                      ...form,
+                    setTaskForm({
+                      ...taskForm,
                       assignee: event.target.value,
                     })
                   }
-                  className={input}
+                  className={field}
                 >
                   <option value="">Unassigned</option>
-                  {form.assignee &&
-                    !team.includes(form.assignee) && (
-                      <option value={form.assignee}>
-                        {form.assignee}
+
+                  {taskForm.assignee &&
+                    !team.includes(taskForm.assignee) && (
+                      <option value={taskForm.assignee}>
+                        {taskForm.assignee}
                       </option>
                     )}
+
                   {team.map((member) => (
-                    <option key={member} value={member}>
+                    <option
+                      key={member}
+                      value={member}
+                    >
                       {member}
                     </option>
                   ))}
@@ -1571,56 +1439,57 @@ export default function App() {
 
               <div>
                 <label htmlFor="task-date" className={label}>
-                  Due date
+                  Due Date
                 </label>
                 <input
                   id="task-date"
                   type="date"
-                  value={form.dueDate}
+                  value={taskForm.dueDate}
                   onChange={(event) =>
-                    setForm({
-                      ...form,
+                    setTaskForm({
+                      ...taskForm,
                       dueDate: event.target.value,
                     })
                   }
-                  className={input}
+                  className={field}
                 />
               </div>
             </div>
 
             <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 p-5">
-              <div className="mb-4">
-                <p className="text-xs font-extrabold uppercase tracking-wider text-indigo-600">
-                  ✦ AI Development Context
-                </p>
-                <p className="mt-1 text-xs leading-5 text-indigo-700">
-                  Save useful requirements, file references and
-                  decisions for your next AI session.
-                </p>
-              </div>
+              <h3 className="text-sm font-extrabold text-indigo-800">
+                ✦ AI Task Context
+              </h3>
+              <p className="mb-3 mt-1 text-xs text-indigo-600">
+                Save requirements, relevant files and decisions
+                for future AI prompts.
+              </p>
 
               <textarea
                 aria-label="Task Context / AI Briefing"
                 rows={4}
-                value={form.context}
+                value={taskForm.context}
                 onChange={(event) =>
-                  setForm({
-                    ...form,
+                  setTaskForm({
+                    ...taskForm,
                     context: event.target.value,
                   })
                 }
-                placeholder="Relevant files, requirements, constraints, decisions..."
-                className={input}
+                placeholder="Relevant files, requirements, technical constraints..."
+                className={field}
               />
 
               <button
                 type="button"
                 onClick={() =>
-                  copyText(taskContext(form), setTaskMessage)
+                  copyText(
+                    taskContext(taskForm),
+                    setTaskMessage
+                  )
                 }
                 className="mt-3 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700"
               >
-                Copy as Prompt Context
+                Copy Task Context
               </button>
 
               {taskMessage && (
@@ -1633,74 +1502,74 @@ export default function App() {
               )}
             </div>
 
-            {/* HACKATHON: PROMPT / TOOL / OUTCOME */}
-            <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-5">
-              <p className="text-xs font-extrabold uppercase tracking-wider text-violet-700">
-                ◈ AI Workflow Log
-              </p>
-              <p className="mb-4 mt-1 text-xs leading-5 text-violet-600">
-                Record how AI helped you build this feature.
-                This makes your development process visible.
+            <details className="rounded-2xl border border-slate-200 bg-white p-5">
+              <summary className="cursor-pointer text-sm font-extrabold text-slate-800">
+                ✦ AI Development Log (optional)
+              </summary>
+
+              <p className="mt-3 text-xs leading-5 text-slate-500">
+                Record how AI helped you complete this task.
+                Useful for reviewing your hackathon workflow.
               </p>
 
-              <div className="space-y-4">
+              <div className="mt-4 space-y-4">
                 <div>
                   <label htmlFor="ai-tool" className={label}>
-                    AI tool used
+                    AI Tool Used
                   </label>
                   <input
                     id="ai-tool"
-                    value={form.aiTool}
+                    value={taskForm.aiTool}
                     onChange={(event) =>
-                      setForm({
-                        ...form,
+                      setTaskForm({
+                        ...taskForm,
                         aiTool: event.target.value,
                       })
                     }
-                    placeholder="e.g. ChatGPT, GitHub Copilot"
-                    className={input}
+                    placeholder="e.g. ChatGPT"
+                    className={field}
                   />
                 </div>
 
                 <div>
                   <label htmlFor="ai-prompt" className={label}>
-                    Prompt used
+                    Prompt Used
                   </label>
                   <textarea
                     id="ai-prompt"
                     rows={3}
-                    value={form.aiPrompt}
+                    value={taskForm.aiPrompt}
                     onChange={(event) =>
-                      setForm({
-                        ...form,
+                      setTaskForm({
+                        ...taskForm,
                         aiPrompt: event.target.value,
                       })
                     }
-                    placeholder="What did you ask the AI?"
-                    className={input}
+                    placeholder="What did you ask?"
+                    className={field}
                   />
                 </div>
 
                 <div>
                   <label htmlFor="ai-outcome" className={label}>
-                    Outcome / what you changed
+                    Outcome
                   </label>
                   <textarea
                     id="ai-outcome"
                     rows={3}
-                    value={form.aiOutcome}
+                    value={taskForm.aiOutcome}
                     onChange={(event) =>
-                      setForm({
-                        ...form,
+                      setTaskForm({
+                        ...taskForm,
                         aiOutcome: event.target.value,
                       })
                     }
-                    placeholder="What worked, what didn't, and what did you improve?"
-                    className={input}
+                    placeholder="What worked and what did you change?"
+                    className={field}
                   />
                 </div>
               </div>
-            </div>
+            </details>
 
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-5">
               {editing.id !== null ? (
@@ -1723,8 +1592,13 @@ export default function App() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className={primary}>
-                  {editing.id === null ? 'Create Task' : 'Save Changes'}
+                <button
+                  type="submit"
+                  className={primary}
+                >
+                  {editing.id === null
+                    ? 'Create Task'
+                    : 'Save Changes'}
                 </button>
               </div>
             </div>
@@ -1732,19 +1606,22 @@ export default function App() {
         </Modal>
       )}
 
-      {/* TEAM MODAL */}
+      {/* TEAM MANAGEMENT */}
       {teamOpen && (
         <Modal
           title="Manage Team"
-          subtitle="Add teammates and assign them to tasks."
+          subtitle="Add teammates and assign tasks to them."
           onClose={() => {
             setTeamOpen(false);
             setTeamError('');
           }}
         >
-          <form onSubmit={addMember} className="flex gap-2">
+          <form
+            onSubmit={addMember}
+            className="flex gap-2"
+          >
             <input
-              aria-label="New team member"
+              aria-label="Team member name"
               value={memberName}
               onChange={(event) => {
                 setMemberName(event.target.value);
@@ -1752,15 +1629,21 @@ export default function App() {
               }}
               placeholder="Team member name"
               required
-              className={`${input} min-w-0 flex-1`}
+              className={`${field} min-w-0 flex-1`}
             />
-            <button type="submit" className={primary}>
+            <button
+              type="submit"
+              className={primary}
+            >
               Add
             </button>
           </form>
 
           {teamError && (
-            <p role="alert" className="mt-3 text-sm text-red-600">
+            <p
+              role="alert"
+              className="mt-3 text-sm text-red-600"
+            >
               {teamError}
             </p>
           )}
@@ -1772,7 +1655,7 @@ export default function App() {
                 className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3"
               >
                 <div className="flex min-w-0 items-center gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-extrabold text-indigo-700">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-bold text-indigo-700">
                     {initials(member)}
                   </span>
                   <span className="truncate text-sm font-semibold">
@@ -1804,7 +1687,7 @@ export default function App() {
         </Modal>
       )}
 
-      {/* DELIVERABLE MODAL */}
+      {/* DELIVERABLE EDITOR */}
       {editingAnchor !== null && (
         <Modal
           title={
@@ -1812,13 +1695,16 @@ export default function App() {
               ? 'Add Deliverable'
               : 'Edit Deliverable'
           }
-          subtitle="Pin a document, project link or final output."
+          subtitle="Keep important project resources together."
           onClose={() => setEditingAnchor(null)}
         >
-          <form onSubmit={saveAnchor} className="space-y-5">
+          <form
+            onSubmit={saveAnchor}
+            className="space-y-5"
+          >
             <div>
               <label htmlFor="anchor-title" className={label}>
-                Deliverable name
+                Deliverable Name
               </label>
               <input
                 id="anchor-title"
@@ -1831,12 +1717,15 @@ export default function App() {
                   })
                 }
                 placeholder="e.g. Project Presentation"
-                className={input}
+                className={field}
               />
             </div>
 
             <div>
-              <label htmlFor="anchor-description" className={label}>
+              <label
+                htmlFor="anchor-description"
+                className={label}
+              >
                 Description
               </label>
               <textarea
@@ -1849,8 +1738,8 @@ export default function App() {
                     description: event.target.value,
                   })
                 }
-                placeholder="What is this deliverable for?"
-                className={input}
+                placeholder="What is this resource for?"
+                className={field}
               />
             </div>
 
@@ -1869,9 +1758,18 @@ export default function App() {
                   })
                 }
                 placeholder="https://..."
-                className={input}
+                className={field}
               />
             </div>
+
+            {anchorError && (
+              <p
+                role="alert"
+                className="text-sm text-red-600"
+              >
+                {anchorError}
+              </p>
+            )}
 
             <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-5">
               {editingAnchor.id !== null ? (
@@ -1894,9 +1792,12 @@ export default function App() {
                 >
                   Cancel
                 </button>
-                <button type="submit" className={primary}>
+                <button
+                  type="submit"
+                  className={primary}
+                >
                   {editingAnchor.id === null
-                    ? 'Pin Deliverable'
+                    ? 'Add Deliverable'
                     : 'Save Changes'}
                 </button>
               </div>
